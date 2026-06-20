@@ -254,6 +254,20 @@ svg {
   margin-bottom: 12px;
 }
 
+.group__title.is-draggable {
+  cursor: grab;
+  user-select: none;
+  width: fit-content;
+}
+
+.group__title.is-draggable:active {
+  cursor: grabbing;
+}
+
+.group.is-dragging {
+  opacity: 0.5;
+}
+
 .group__icon {
   flex-shrink: 0;
   width: 15px;
@@ -284,6 +298,10 @@ svg {
 .card:hover {
   border-color: var(--accent);
   background: var(--hover);
+}
+
+.card.is-dragging {
+  opacity: 0.45;
 }
 
 .card:active {

@@ -51,16 +51,30 @@ const state = {
   topChildren: [], // 书签栏顶层条目（散装书签 + 目录），保持原始顺序
   topFolders: [], // 其中的目录
   allBookmarks: [], // 扁平化全部书签（搜索用）
+  nodeById: Object.create(null), // id -> 节点（整棵书签栏子树），排序换算用
   currentEntryId: null,
 };
 
-// 拖拽排序状态
+// 侧栏拖拽排序状态
 const drag = { el: null, id: null, fromIndex: -1 };
+// 内容区拖拽排序状态（卡片 / 分区）
+const cdrag = {
+  type: null, // "card" | "section"
+  el: null,
+  grid: null,
+  group: null,
+  id: null,
+  parentId: null,
+  fromIndex: -1,
+  fromPrev: null,
+  fromNext: null,
+};
 // 由本扩展自己发起的 move，其 onMoved 回调应跳过整页刷新（避免闪烁/打断）
 const selfMoves = new Set();
 
 init();
 setupSidebarDnd();
+setupContentDnd();
 setupBookmarkListeners();
 
 async function init() {
@@ -78,13 +92,17 @@ async function init() {
   state.topChildren = barNode.children || []; // 顶层条目（散装书签 + 目录），保持原始顺序
   state.topFolders = state.topChildren.filter(isFolder);
   state.allBookmarks = flattenBookmarks(barNode);
+  state.nodeById = Object.create(null);
+  indexNodes(barNode);
 
   renderSidebar();
 
-  // 默认选中第一个目录；若没有目录则提示
-  const firstFolder = state.topFolders[0];
-  if (firstFolder) {
-    selectEntry(firstFolder.id);
+  // 保持当前选中目录（刷新后不跳回第一个）；否则默认第一个目录
+  const target =
+    state.topFolders.find((f) => f.id === state.currentEntryId) ||
+    state.topFolders[0];
+  if (target) {
+    selectEntry(target.id);
   } else {
     state.currentEntryId = null;
     els.contentTitle.textContent = "";
@@ -121,23 +139,40 @@ function flattenBookmarks(node, out = []) {
   return out;
 }
 
+function indexNodes(node) {
+  state.nodeById[node.id] = node;
+  for (const child of node.children || []) indexNodes(child);
+}
+
 /**
  * 把一个目录递归展开成多个分区：
- *  - 目录自身的直属书签为一个分区（path 为空）
- *  - 每个含书签的子目录为一个分区（path 记录相对层级，用于分区标题）
+ *  - 目录自身的直属书签为一个分区（path 为空，folderId 即该目录）
+ *  - 每个含书签的子目录为一个分区（path 记录相对层级，parentId 为其父目录）
  */
 function buildSections(folder) {
   const sections = [];
 
   const direct = (folder.children || []).filter(isBookmark);
-  if (direct.length) sections.push({ path: [], bookmarks: direct });
+  if (direct.length)
+    sections.push({
+      folderId: folder.id,
+      parentId: folder.parentId,
+      path: [],
+      bookmarks: direct,
+    });
 
   const walk = (node, path) => {
     for (const child of node.children || []) {
       if (!isFolder(child)) continue;
       const childPath = [...path, child.title || "Untitled folder"];
       const bms = (child.children || []).filter(isBookmark);
-      if (bms.length) sections.push({ path: childPath, bookmarks: bms });
+      if (bms.length)
+        sections.push({
+          folderId: child.id,
+          parentId: node.id,
+          path: childPath,
+          bookmarks: bms,
+        });
       walk(child, childPath);
     }
   };
@@ -231,7 +266,10 @@ function setupSidebarDnd() {
     if (!drag.el) return;
     e.preventDefault(); // 允许放置
     e.dataTransfer.dropEffect = "move";
-    const after = dragAfterElement(list, e.clientY);
+    const candidates = list.querySelectorAll(
+      ".folder-list__item:not(.is-dragging)"
+    );
+    const after = elementAfter(candidates, e.clientY);
     if (after == null) list.appendChild(drag.el);
     else list.insertBefore(drag.el, after);
   });
@@ -264,18 +302,198 @@ function indexInList(item) {
   return Array.prototype.indexOf.call(els.folderList.children, item);
 }
 
-/** 根据指针 Y 坐标，找到 dragged 元素应插入到其之前的兄弟项 */
-function dragAfterElement(list, y) {
-  const items = [
-    ...list.querySelectorAll(".folder-list__item:not(.is-dragging)"),
-  ];
+/** 单列竖排：给定候选元素和指针 Y，返回应插入到其之前的元素（null 表示末尾） */
+function elementAfter(candidates, y) {
   let closest = { offset: -Infinity, el: null };
-  for (const child of items) {
+  for (const child of candidates) {
     const box = child.getBoundingClientRect();
     const offset = y - box.top - box.height / 2;
     if (offset < 0 && offset > closest.offset) closest = { offset, el: child };
   }
   return closest.el;
+}
+
+/**
+ * 多列网格：找到离指针中心最近的卡片，再按指针在其左/右半区决定插到它之前还是之后。
+ * 返回应插入到其之前的元素（null 表示放到末尾）。单纯比较 Y 在多列网格里无法区分同行各列。
+ */
+function gridElementAfter(candidates, x, y) {
+  let nearest = null;
+  let min = Infinity;
+  for (const child of candidates) {
+    const box = child.getBoundingClientRect();
+    const cx = box.left + box.width / 2;
+    const cy = box.top + box.height / 2;
+    const dist = Math.hypot(x - cx, y - cy);
+    if (dist < min) {
+      min = dist;
+      nearest = { el: child, after: x > cx };
+    }
+  }
+  if (!nearest) return null;
+  return nearest.after ? nearest.el.nextElementSibling : nearest.el;
+}
+
+/**
+ * 内容区拖拽排序（事件委托，注册一次）：
+ *  - 卡片：在所属网格内（同目录）排序，不跨目录
+ *  - 分区标题：在同父目录的子目录之间排序
+ * 二者都通过 chrome.bookmarks.move 写回原生书签。
+ */
+function setupContentDnd() {
+  const body = els.contentBody;
+
+  body.addEventListener("dragstart", (e) => {
+    const card = e.target.closest?.(".card--draggable");
+    if (card) {
+      cdrag.type = "card";
+      cdrag.el = card;
+      cdrag.grid = card.parentElement;
+      cdrag.id = card.dataset.id;
+      cdrag.fromIndex = childIndex(cdrag.grid, card);
+      card.classList.add("is-dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", cdrag.id);
+      return;
+    }
+    const heading = e.target.closest?.(".group__title.is-draggable");
+    if (heading) {
+      const group = heading.closest(".group");
+      cdrag.type = "section";
+      cdrag.group = group;
+      cdrag.id = group.dataset.folderId;
+      cdrag.parentId = group.dataset.parentId;
+      [cdrag.fromPrev, cdrag.fromNext] = siblingSections(group);
+      group.classList.add("is-dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", cdrag.id);
+    }
+  });
+
+  body.addEventListener("dragover", (e) => {
+    if (cdrag.type === "card") {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const cards = cdrag.grid.querySelectorAll(".card:not(.is-dragging)");
+      const after = gridElementAfter(cards, e.clientX, e.clientY);
+      if (after == null) cdrag.grid.appendChild(cdrag.el);
+      else if (after !== cdrag.el) cdrag.grid.insertBefore(cdrag.el, after);
+    } else if (cdrag.type === "section") {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const sibs = sameParentGroups(cdrag.parentId).filter(
+        (g) => g !== cdrag.group
+      );
+      const after = elementAfter(sibs, e.clientY);
+      if (after) body.insertBefore(cdrag.group, after);
+      else if (sibs.length)
+        body.insertBefore(cdrag.group, sibs[sibs.length - 1].nextElementSibling);
+    }
+  });
+
+  body.addEventListener("drop", (e) => {
+    if (cdrag.type) e.preventDefault();
+  });
+
+  body.addEventListener("dragend", () => {
+    if (cdrag.type === "card") {
+      cdrag.el.classList.remove("is-dragging");
+      if (childIndex(cdrag.grid, cdrag.el) !== cdrag.fromIndex) {
+        const next = cdrag.el.nextElementSibling;
+        const prev = cdrag.el.previousElementSibling;
+        selfMoves.add(cdrag.id); // 网格 DOM 已更新，跳过整页刷新
+        reorderWithinParent(
+          cdrag.grid.dataset.folderId,
+          cdrag.id,
+          next?.dataset.id ?? null,
+          prev?.dataset.id ?? null,
+          true // 同步内存模型，便于连续拖拽
+        );
+      }
+    } else if (cdrag.type === "section") {
+      cdrag.group.classList.remove("is-dragging");
+      const [prev, next] = siblingSections(cdrag.group);
+      if (prev !== cdrag.fromPrev || next !== cdrag.fromNext) {
+        // 不跳过刷新：move 后整页重渲染，修正嵌套子分区的归位
+        reorderWithinParent(
+          cdrag.parentId,
+          cdrag.id,
+          next?.dataset.folderId ?? null,
+          prev?.dataset.folderId ?? null,
+          false
+        );
+      }
+    }
+    resetContentDrag();
+  });
+}
+
+function resetContentDrag() {
+  cdrag.type = cdrag.el = cdrag.grid = cdrag.group = null;
+  cdrag.id = cdrag.parentId = null;
+  cdrag.fromIndex = -1;
+  cdrag.fromPrev = cdrag.fromNext = null;
+}
+
+function childIndex(parent, el) {
+  return Array.prototype.indexOf.call(parent.children, el);
+}
+
+/** 内容区内所有属于 parentId 的分区 group（按 DOM 顺序） */
+function sameParentGroups(parentId) {
+  return [...els.contentBody.children].filter(
+    (g) => g.classList?.contains("group") && g.dataset.parentId === parentId
+  );
+}
+
+/** 返回 group 在“同父分区”里前后相邻的兄弟分区 [prev, next] */
+function siblingSections(group) {
+  const parentId = group.dataset.parentId;
+  const match = (el, dir) => {
+    let n = el[dir];
+    while (n) {
+      if (n.classList?.contains("group") && n.dataset.parentId === parentId)
+        return n;
+      n = n[dir];
+    }
+    return null;
+  };
+  return [
+    match(group, "previousElementSibling"),
+    match(group, "nextElementSibling"),
+  ];
+}
+
+/**
+ * 把 movedId 在同一父目录 parentId 内移动到「nextId 之前」或「prevId 之后」。
+ * Chrome 把书签与目录存在同一 children 数组里，故按相邻同类项的绝对下标计算 index，
+ * 经 BookmarkModel::Move 的同父自减后正好落到目标位置（向上/向下均已验证）。
+ * optimisticLocal=true 时同步更新内存模型，便于连续拖拽而无需重渲染。
+ */
+function reorderWithinParent(parentId, movedId, nextId, prevId, optimisticLocal) {
+  const parent = state.nodeById[parentId];
+  if (!parent || !parent.children) return;
+  const children = parent.children;
+  const absOf = (id) => children.findIndex((c) => c.id === id);
+
+  let index;
+  if (nextId != null) index = absOf(nextId);
+  else if (prevId != null) index = absOf(prevId) + 1;
+  else return;
+  if (index < 0) return;
+
+  chrome.bookmarks.move(movedId, { parentId, index });
+
+  if (optimisticLocal) {
+    const from = absOf(movedId);
+    if (from < 0) return;
+    const [node] = children.splice(from, 1);
+    let to;
+    if (nextId != null) to = children.findIndex((c) => c.id === nextId);
+    else to = children.findIndex((c) => c.id === prevId) + 1;
+    if (to < 0) to = children.length;
+    children.splice(to, 0, node);
+  }
 }
 
 /* ------------------------------ 内容区 ------------------------------ */
@@ -305,13 +523,18 @@ function renderSections(sections, rootLabel, rootIcon) {
     const isSub = section.path.length > 0;
     const title = isSub ? section.path.join("  /  ") : rootLabel;
     const iconName = isSub ? "folderOpen" : rootIcon; // 子目录用“打开”图标
+    const cards = section.bookmarks.map((b) => makeBookmarkCard(b, true));
     els.contentBody.appendChild(
-      makeGroup(title, iconName, section.bookmarks.map(makeBookmarkCard))
+      makeGroup(title, iconName, cards, {
+        folderId: section.folderId,
+        parentId: section.parentId,
+        draggableHeading: isSub, // 仅子目录分区可整段拖动排序；根分区即当前目录本身
+      })
     );
   }
 }
 
-function makeGroup(title, iconName, cards) {
+function makeGroup(title, iconName, cards, meta) {
   const group = document.createElement("div");
   group.className = "group";
 
@@ -325,13 +548,25 @@ function makeGroup(title, iconName, cards) {
   grid.className = "grid";
   grid.append(...cards);
 
+  if (meta) {
+    group.dataset.folderId = meta.folderId;
+    group.dataset.parentId = meta.parentId ?? "";
+    grid.dataset.folderId = meta.folderId; // 网格内书签都属于该目录
+    if (meta.draggableHeading) {
+      heading.draggable = true;
+      heading.classList.add("is-draggable");
+    }
+  }
+
   group.append(heading, grid);
   return group;
 }
 
-function makeBookmarkCard(bookmark) {
+function makeBookmarkCard(bookmark, draggable = false) {
   const card = document.createElement("a");
-  card.className = "card";
+  card.className = draggable ? "card card--draggable" : "card";
+  card.dataset.id = bookmark.id;
+  if (draggable) card.draggable = true;
   card.href = bookmark.url;
   card.target = "_blank";
   card.rel = "noopener";
@@ -393,9 +628,9 @@ function onSearch() {
     els.contentBody.appendChild(makeEmpty("No matching bookmarks"));
     return;
   }
-  els.contentBody.appendChild(
-    makeGroup(`Results (${matches.length})`, "search", matches.map(makeBookmarkCard))
-  );
+  // 搜索结果跨目录，不可排序
+  const cards = matches.map((b) => makeBookmarkCard(b, false));
+  els.contentBody.appendChild(makeGroup(`Results (${matches.length})`, "search", cards));
 }
 
 function clearSearch() {
