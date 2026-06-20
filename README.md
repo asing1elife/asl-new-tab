@@ -20,6 +20,7 @@ Chrome's native bookmark bar opens bookmarks in the **current** tab. This extens
 - **Auto-refresh** — listens for bookmark create / update / delete / move events and re-renders automatically
 - **Dark mode** — light and dark color schemes via `prefers-color-scheme`, with a pink-to-orange gradient background and glassmorphism panels
 - **Unsplash wallpapers** — set a personal background from Unsplash's landscape photos; add your Access Key in **Settings**, hit **refresh** for a new image. The picture is cached as a base64 data URL in `chrome.storage.local`, so it restores instantly on every new tab — even offline. The translucent glassmorphism panels let the wallpaper glow through behind your bookmarks.
+- **Click dashboard** — every bookmark click is logged locally (title, URL, timestamp) in `chrome.storage.local`. Open the 📊 dashboard from the sidebar to see usage over **Today / Last 7 days / Last 30 days**: summary cards (total clicks, bookmarks used, daily average), a per-day trend bar chart, and a per-bookmark table ranked by clicks. Data stays on your machine, is kept for 30 days (older entries auto-pruned), and writes are debounced + mirrored in memory for zero overhead.
 
 ## Install (Developer Mode)
 
@@ -43,7 +44,7 @@ Chrome's native bookmark bar opens bookmarks in the **current** tab. This extens
 ├── manifest.json     # MV3 configuration
 ├── newtab.html       # Page structure
 ├── newtab.css        # Styles (two-column layout, light/dark, glassmorphism)
-├── newtab.js         # Bookmark rendering, drag-and-drop, CRUD, search, wallpaper logic
+├── newtab.js         # Bookmark rendering, drag-and-drop, CRUD, search, wallpaper, click-stats dashboard
 └── icons/            # Extension icons (16, 48, 128)
 ```
 
@@ -53,7 +54,7 @@ Chrome's native bookmark bar opens bookmarks in the **current** tab. This extens
 |---|---|
 | `bookmarks` | Read and modify the native Chrome bookmark tree |
 | `favicon` | Load website favicons via `chrome://favicon/` |
-| `storage` | Persist the Unsplash Access Key and cached wallpaper |
+| `storage` | Persist the Unsplash Access Key, cached wallpaper, and bookmark click stats |
 
 ## Tech Stack
 
