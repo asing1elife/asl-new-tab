@@ -353,8 +353,9 @@ svg {
   left: 11px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--text-muted);
+  color: #ffffff;
   pointer-events: none;
+  z-index: 1;
 }
 
 .search__icon svg {
@@ -383,8 +384,7 @@ svg {
 .content__body {
   flex: 1;
   overflow-y: auto;
-  /* 去掉最外层左侧边距：顶层书签内容贴左，子目录缩进以此为基准 */
-  padding: 22px 24px 36px 0;
+  padding: 22px 24px 36px 24px;
 }
 
 /* ---------- Sections（含层级缩进 + 树状导引线） ---------- */

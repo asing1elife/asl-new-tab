@@ -582,7 +582,7 @@ function makeGroup({ title, tooltip, iconName, depth = 0, cards, meta }) {
   group.className = "group";
   if (depth > 0) {
     group.classList.add("is-nested");
-    group.style.setProperty("--depth", String(depth));
+    group.style.setProperty("--depth", String(depth - 1));
   }
 
   const heading = document.createElement("div");
