@@ -521,26 +521,37 @@ function renderSections(sections, rootLabel, rootIcon) {
   }
 
   for (const section of usable) {
-    const isSub = section.path.length > 0;
-    const title = isSub ? section.path.join("  /  ") : rootLabel;
-    const iconName = isSub ? "folderOpen" : rootIcon; // 子目录用“打开”图标
-    const cards = section.bookmarks.map((b) => makeBookmarkCard(b, true));
+    const depth = section.path.length;
+    const isSub = depth > 0;
     els.contentBody.appendChild(
-      makeGroup(title, iconName, cards, {
-        folderId: section.folderId,
-        parentId: section.parentId,
-        draggableHeading: isSub, // 仅子目录分区可整段拖动排序；根分区即当前目录本身
+      makeGroup({
+        // 标题只显示当前目录名，完整路径放进 tooltip；层级靠缩进体现
+        title: isSub ? section.path[depth - 1] : rootLabel,
+        tooltip: isSub ? section.path.join(" / ") : rootLabel,
+        iconName: isSub ? "folderOpen" : rootIcon,
+        depth,
+        cards: section.bookmarks.map((b) => makeBookmarkCard(b, true)),
+        meta: {
+          folderId: section.folderId,
+          parentId: section.parentId,
+          draggableHeading: isSub, // 仅子目录分区可整段拖动排序；根分区即当前目录本身
+        },
       })
     );
   }
 }
 
-function makeGroup(title, iconName, cards, meta) {
+function makeGroup({ title, tooltip, iconName, depth = 0, cards, meta }) {
   const group = document.createElement("div");
   group.className = "group";
+  if (depth > 0) {
+    group.classList.add("is-nested");
+    group.style.setProperty("--depth", String(depth));
+  }
 
   const heading = document.createElement("div");
   heading.className = "group__title";
+  if (tooltip) heading.title = tooltip;
   const text = document.createElement("span");
   text.textContent = title;
   heading.append(icon(iconName, "group__icon"), text);
@@ -631,7 +642,9 @@ function onSearch() {
   }
   // 搜索结果跨目录，不可排序
   const cards = matches.map((b) => makeBookmarkCard(b, false));
-  els.contentBody.appendChild(makeGroup(`Results (${matches.length})`, "search", cards));
+  els.contentBody.appendChild(
+    makeGroup({ title: `Results (${matches.length})`, iconName: "search", cards })
+  );
 }
 
 function clearSearch() {
