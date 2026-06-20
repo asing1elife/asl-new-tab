@@ -12,7 +12,8 @@ const BOOKMARK_BAR_ID = "1";
 
 /* ---------- Lucide 图标（MIT, lucide.dev） ---------- */
 const ICONS = {
-  bar: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/>',
+  compass:
+    '<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>',
   folder:
     '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
   folderOpen:
@@ -78,7 +79,7 @@ setupContentDnd();
 setupBookmarkListeners();
 
 async function init() {
-  els.brandIcon.replaceChildren(icon("bar"));
+  els.brandIcon.replaceChildren(icon("compass"));
   els.searchIcon.replaceChildren(icon("search"));
 
   let barNode;
