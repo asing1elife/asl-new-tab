@@ -1,33 +1,52 @@
 # ASL New Tab
 
-自定义 Chrome 新标签页：读取原生书签栏数据并渲染成门户页，**点击书签默认在新标签页打开**。
+A custom Chrome new tab page that turns your native bookmarks into a beautiful, organized portal. Click any bookmark to open it in a new tab.
 
-解决的痛点：Chrome 原生书签栏点击书签会在当前页打开，本扩展用一个自定义 New Tab 门户页来替代，左侧目录、右侧书签，点击书签新开标签页。
+## Why
 
-## 功能
+Chrome's native bookmark bar opens bookmarks in the **current** tab. This extension replaces the new tab page with a two-panel portal — folders and loose bookmarks on the left, detailed contents on the right — so every click opens a fresh tab.
 
-- 覆盖 Chrome 新标签页（`chrome_url_overrides.newtab`）
-- 通过 `chrome.bookmarks` API 读取原生书签栏（无需手动维护数据）
-- 左侧：书签栏最顶层目录；右侧：所选目录下的子目录与书签
-- 点击书签 → 在新标签页打开；点击子目录 → 下钻并显示面包屑
-- 顶部搜索框全局过滤书签
-- 真实网站 favicon（`_favicon` API），明/暗色自适配
-- 监听书签增删改，自动刷新
+## Features
 
-## 安装（开发者模式）
+- **Override Chrome's new tab page** via `chrome_url_overrides.newtab`
+- **Reads native bookmarks** through `chrome.bookmarks` API — no manual data upkeep
+- **Left sidebar**: top-level folders and loose bookmarks from the bookmark bar, drag-reorderable within the sidebar
+- **Right content area**: selected folder's bookmarks rendered in recursive sub-directory sections with tree-line indentation
+- **Click to open** — bookmarks always open in a new tab
+- **Bidirectional drag-and-drop** — reorder items within sidebar or content grids; drag bookmarks between the sidebar and any folder group in either direction
+- **Full CRUD** — create, rename, and delete folders and bookmarks via modal dialogs; add subfolders and bookmarks to any directory
+- **Search** — global filter across all bookmarks by title or URL
+- **Favicons** — real website favicons via Chrome's `_favicon` API, with a fallback globe icon on error
+- **Auto-refresh** — listens for bookmark create / update / delete / move events and re-renders automatically
+- **Dark mode** — light and dark color schemes via `prefers-color-scheme`, with a pink-to-orange gradient background and glassmorphism panels
 
-1. 打开 `chrome://extensions/`
-2. 开启右上角「开发者模式」
-3. 点「加载已解压的扩展程序」，选择本项目文件夹
-4. 新开一个标签页即可看到效果
+## Install (Developer Mode)
 
-## 目录结构
+1. Open `chrome://extensions/`
+2. Enable **Developer mode** (top right)
+3. Click **Load unpacked** and select this project folder
+4. Open a new tab to see the result
+
+## Project Structure
 
 ```
 .
-├── manifest.json     # MV3 配置
-├── newtab.html       # 页面结构
-├── newtab.css        # 样式（两栏布局，明/暗色）
-├── newtab.js         # 读取书签栏并渲染的逻辑
-└── icons/            # 扩展图标
+├── manifest.json     # MV3 configuration
+├── newtab.html       # Page structure
+├── newtab.css        # Styles (two-column layout, light/dark, glassmorphism)
+├── newtab.js         # Bookmark rendering, drag-and-drop, CRUD, search logic
+└── icons/            # Extension icons (16, 48, 128)
 ```
+
+## Permissions
+
+| Permission | Purpose |
+|---|---|
+| `bookmarks` | Read and modify the native Chrome bookmark tree |
+| `favicon` | Load website favicons via `chrome://favicon/` |
+
+## Tech Stack
+
+- **Manifest V3** Chrome extension
+- **Zero dependencies** — vanilla HTML, CSS, and JavaScript
+- **Lucide icons** — embedded inline SVGs (MIT licensed)

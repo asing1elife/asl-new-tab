@@ -252,10 +252,10 @@ function makeSidebarBookmark(bookmark) {
   const actions = document.createElement("span");
   actions.className = "folder-list__actions";
   actions.append(
-    makeActionButton("squarePen", "编辑书签", "edit", () =>
+    makeActionButton("squarePen", "Edit bookmark", "edit", () =>
       openBookmarkEditDialog(bookmark)
     ),
-    makeActionButton("trash", "删除书签", "danger", () =>
+    makeActionButton("trash", "Delete bookmark", "danger", () =>
       openBookmarkDeleteDialog(bookmark)
     )
   );
@@ -715,10 +715,10 @@ function makeBookmarkCard(bookmark, draggable = false) {
   const actions = document.createElement("span");
   actions.className = "card__actions";
   actions.append(
-    makeActionButton("squarePen", "编辑书签", "edit", () =>
+    makeActionButton("squarePen", "Edit bookmark", "edit", () =>
       openBookmarkEditDialog(bookmark)
     ),
-    makeActionButton("trash", "删除书签", "danger", () =>
+    makeActionButton("trash", "Delete bookmark", "danger", () =>
       openBookmarkDeleteDialog(bookmark)
     )
   );
@@ -740,7 +740,7 @@ function makeAddBookmarkCard(folderId) {
 
   const label = document.createElement("span");
   label.className = "card__label";
-  label.textContent = "新增书签";
+  label.textContent = "Add bookmark";
 
   btn.append(iconWrap, label);
   btn.addEventListener("click", () => openBookmarkCreateDialog(folderId));
@@ -808,16 +808,16 @@ function makeFolderActions(folder, className, withAdd) {
   const title = folder.title || "Untitled folder";
   if (withAdd) {
     wrap.append(
-      makeActionButton("circlePlus", "新增子目录", "add", () =>
+      makeActionButton("circlePlus", "Add subfolder", "add", () =>
         openCreateDialog(folder.id, title)
       )
     );
   }
   wrap.append(
-    makeActionButton("squarePen", "重命名目录", "edit", () =>
+    makeActionButton("squarePen", "Rename folder", "edit", () =>
       openRenameDialog(folder.id, folder.title || "")
     ),
-    makeActionButton("trash", "删除目录", "danger", () =>
+    makeActionButton("trash", "Delete folder", "danger", () =>
       openDeleteDialog(folder.id, title)
     )
   );
@@ -848,12 +848,12 @@ function showModal({ title, confirmText, confirmClass, buildBody, onConfirm }) {
   const cancelBtn = document.createElement("button");
   cancelBtn.type = "button";
   cancelBtn.className = "modal__btn";
-  cancelBtn.textContent = "取消";
+  cancelBtn.textContent = "Cancel";
 
   const confirmBtn = document.createElement("button");
   confirmBtn.type = "button";
   confirmBtn.className = `modal__btn ${confirmClass || "modal__btn--primary"}`;
-  confirmBtn.textContent = confirmText || "确定";
+  confirmBtn.textContent = confirmText || "OK";
 
   footer.append(cancelBtn, confirmBtn);
   modal.append(header, body, footer);
@@ -885,8 +885,8 @@ function showModal({ title, confirmText, confirmClass, buildBody, onConfirm }) {
 
 function openRenameDialog(folderId, currentTitle) {
   showModal({
-    title: "重命名目录",
-    confirmText: "保存",
+    title: "Rename folder",
+    confirmText: "Save",
     buildBody(body, ctx) {
       const input = document.createElement("input");
       input.className = "modal__input";
@@ -916,13 +916,13 @@ function openRenameDialog(folderId, currentTitle) {
 function openCreateDialog(parentId = BOOKMARK_BAR_ID, parentTitle) {
   const isTopLevel = parentId === BOOKMARK_BAR_ID;
   showModal({
-    title: isTopLevel ? "新建目录" : `在「${parentTitle}」中新建子目录`,
-    confirmText: "创建",
+    title: isTopLevel ? "New Folder" : `New subfolder in "${parentTitle}"`,
+    confirmText: "Create",
     buildBody(body, ctx) {
       const input = document.createElement("input");
       input.className = "modal__input";
       input.type = "text";
-      input.placeholder = "目录名称";
+      input.placeholder = "Folder name";
       input.maxLength = 200;
       body.append(input);
       ctx.input = input;
@@ -944,8 +944,8 @@ function openCreateDialog(parentId = BOOKMARK_BAR_ID, parentTitle) {
 
 function openDeleteDialog(folderId, title) {
   showModal({
-    title: "删除目录",
-    confirmText: "删除",
+    title: "Delete folder",
+    confirmText: "Delete",
     confirmClass: "modal__btn--danger",
     buildBody(body) {
       const p = document.createElement("p");
@@ -953,9 +953,9 @@ function openDeleteDialog(folderId, title) {
       const strong = document.createElement("strong");
       strong.textContent = title;
       p.append(
-        "确定要删除目录 ",
+        "Are you sure you want to delete ",
         strong,
-        " 吗？该目录下的所有书签和子目录都会被一并删除，此操作无法撤销。"
+        "? All bookmarks and subfolders inside will also be deleted. This action cannot be undone."
       );
       body.append(p);
     },
@@ -984,11 +984,11 @@ function makeField(labelText, value, placeholder) {
 
 function openBookmarkEditDialog(bookmark) {
   showModal({
-    title: "编辑书签",
-    confirmText: "保存",
+    title: "Edit bookmark",
+    confirmText: "Save",
     buildBody(body, ctx) {
-      const name = makeField("名称", bookmark.title || "", "书签名称");
-      const url = makeField("链接", bookmark.url || "", "https://");
+      const name = makeField("Name", bookmark.title || "", "Bookmark name");
+      const url = makeField("URL", bookmark.url || "", "https://");
       body.append(name.wrap, url.wrap);
       ctx.nameInput = name.input;
       ctx.urlInput = url.input;
@@ -1011,11 +1011,11 @@ function openBookmarkEditDialog(bookmark) {
 
 function openBookmarkCreateDialog(folderId) {
   showModal({
-    title: "新增书签",
-    confirmText: "创建",
+    title: "Add bookmark",
+    confirmText: "Create",
     buildBody(body, ctx) {
-      const name = makeField("名称", "", "书签名称");
-      const url = makeField("链接", "", "https://");
+      const name = makeField("Name", "", "Bookmark name");
+      const url = makeField("URL", "", "https://");
       body.append(name.wrap, url.wrap);
       ctx.nameInput = name.input;
       ctx.urlInput = url.input;
@@ -1035,15 +1035,15 @@ function openBookmarkCreateDialog(folderId) {
 
 function openBookmarkDeleteDialog(bookmark) {
   showModal({
-    title: "删除书签",
-    confirmText: "删除",
+    title: "Delete bookmark",
+    confirmText: "Delete",
     confirmClass: "modal__btn--danger",
     buildBody(body) {
       const p = document.createElement("p");
       p.className = "modal__hint";
       const strong = document.createElement("strong");
       strong.textContent = bookmark.title || bookmark.url;
-      p.append("确定要删除书签 ", strong, " 吗？此操作无法撤销。");
+      p.append("Are you sure you want to delete ", strong, "? This action cannot be undone.");
       body.append(p);
     },
     onConfirm() {
