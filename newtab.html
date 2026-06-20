@@ -9,13 +9,14 @@
   <link rel="stylesheet" href="newtab.css" />
 </head>
 <body>
-  <div class="app">
+  <div class="app" id="app">
     <aside class="sidebar">
       <header class="sidebar__brand">
         <h1 class="sidebar__brand-text">Bookmarks</h1>
         <div class="sidebar__brand-actions">
           <button id="refreshWallpaperBtn" class="sidebar__icon-btn" type="button" title="Refresh wallpaper" aria-label="Refresh wallpaper"></button>
           <button id="settingsBtn" class="sidebar__icon-btn" type="button" title="Settings" aria-label="Settings"></button>
+          <button id="dashboardBtn" class="sidebar__icon-btn" type="button" title="Click dashboard" aria-label="Click dashboard"></button>
         </div>
       </header>
       <nav id="folderList" class="folder-list" aria-label="Bookmark folders"></nav>
@@ -45,6 +46,15 @@
       </header>
       <section id="contentBody" class="content__body" aria-live="polite"></section>
     </main>
+  </div>
+
+  <div id="dashboard" class="dashboard" hidden>
+    <header class="dashboard__bar">
+      <button id="dashboardBackBtn" class="sidebar__icon-btn" type="button" title="Back" aria-label="Back"></button>
+      <h1 class="dashboard__title">Click Dashboard</h1>
+      <div id="dashboardRanges" class="dashboard__ranges"></div>
+    </header>
+    <div id="dashboardBody" class="dashboard__body"></div>
   </div>
 
   <script src="newtab.js"></script>

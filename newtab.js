@@ -35,6 +35,9 @@ const ICONS = {
     '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
   refreshCw:
     '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/>',
+  barChart:
+    '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+  arrowLeft: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
 };
 
 function icon(name, cls) {
@@ -62,6 +65,12 @@ const els = {
   search: document.getElementById("searchInput"),
   refreshWallpaperBtn: document.getElementById("refreshWallpaperBtn"),
   settingsBtn: document.getElementById("settingsBtn"),
+  dashboardBtn: document.getElementById("dashboardBtn"),
+  appView: document.getElementById("app"),
+  dashboardView: document.getElementById("dashboard"),
+  dashboardBackBtn: document.getElementById("dashboardBackBtn"),
+  dashboardRanges: document.getElementById("dashboardRanges"),
+  dashboardBody: document.getElementById("dashboardBody"),
 };
 
 // 模块级状态，每次 init 重建
@@ -91,6 +100,13 @@ const cdrag = {
 const selfMoves = new Set();
 let dropTargetGroup = null; // 跨容器拖拽时高亮的目标分组
 
+// 点击统计与 Dashboard 状态（须在 init() 同步调用前初始化，避免 TDZ）
+const STATS = { KEY: "click_events", RETAIN_DAYS: 30 };
+let clickEvents = []; // 内存镜像：[{ url, title, ts }]
+let clickEventsLoaded = false;
+let saveStatsTimer = null;
+let dashboardRange = "7";
+
 init();
 setupSidebarDnd();
 setupContentDnd();
@@ -102,12 +118,17 @@ async function init() {
   els.refreshWallpaperBtn.style.display = "none"; // 默认隐藏，配置 Key 后才显示
   els.settingsBtn.replaceChildren(icon("settings"));
   els.settingsBtn.onclick = openSettingsModal;
+  els.dashboardBtn.replaceChildren(icon("barChart"));
+  els.dashboardBtn.onclick = openDashboard;
+  els.dashboardBackBtn.replaceChildren(icon("arrowLeft"));
+  els.dashboardBackBtn.onclick = closeDashboard;
   els.searchIcon.replaceChildren(icon("search"));
   els.addFolderIcon.replaceChildren(icon("folderPlus"));
   els.addFolderBtn.onclick = () => openCreateDialog();
 
   loadWallpaper(); // fire-and-forget — loads in parallel with bookmark tree
   syncWallpaperControls(); // 按是否配置 Key 控制刷新按钮显隐
+  loadClickEvents(); // 载入点击统计到内存镜像
 
   let barNode;
   try {
@@ -253,6 +274,7 @@ function makeSidebarBookmark(bookmark) {
   a.target = "_blank";
   a.rel = "noopener";
   a.title = `${bookmark.title || bookmark.url}\n${bookmark.url}`;
+  a.addEventListener("click", () => recordClick(bookmark));
 
   const ic = makeFavicon(bookmark.url, "folder-list__icon");
 
@@ -718,6 +740,7 @@ function makeBookmarkCard(bookmark, draggable = false) {
   card.target = "_blank";
   card.rel = "noopener";
   card.title = `${bookmark.title || bookmark.url}\n${bookmark.url}`;
+  card.addEventListener("click", () => recordClick(bookmark));
 
   const label = document.createElement("span");
   label.className = "card__label";
@@ -1344,6 +1367,256 @@ async function openSettingsModal() {
       syncWallpaperControls();
     },
   });
+}
+
+/* ------------------------------ 点击统计 ------------------------------ */
+
+async function loadClickEvents() {
+  if (clickEventsLoaded) return; // init 会重跑，但统计只从磁盘载入一次
+  clickEventsLoaded = true;
+  try {
+    const all = await chrome.storage.local.get(null);
+    clickEvents = Array.isArray(all[STATS.KEY]) ? all[STATS.KEY] : [];
+  } catch {
+    clickEvents = [];
+  }
+  pruneOldEvents();
+}
+
+/** 丢弃超过保留期的事件，使存储体积保持恒定 */
+function pruneOldEvents() {
+  const cutoff = Date.now() - STATS.RETAIN_DAYS * 86400000;
+  const kept = clickEvents.filter((e) => e.ts >= cutoff);
+  if (kept.length !== clickEvents.length) {
+    clickEvents = kept;
+    saveClickEvents();
+  }
+}
+
+function recordClick(bookmark) {
+  clickEvents.push({
+    url: bookmark.url,
+    title: bookmark.title || bookmark.url,
+    ts: Date.now(),
+  });
+  saveClickEvents();
+}
+
+/** 防抖写盘：快速连点合并为一次写入；写的始终是完整内存镜像，无读改写竞态 */
+function saveClickEvents() {
+  clearTimeout(saveStatsTimer);
+  saveStatsTimer = setTimeout(() => {
+    chrome.storage.local.set({ [STATS.KEY]: clickEvents }).catch(() => {});
+  }, 400);
+}
+
+/* ------------------------------ Dashboard ------------------------------ */
+
+const RANGES = [
+  { key: "today", label: "Today" },
+  { key: "7", label: "Last 7 days" },
+  { key: "30", label: "Last 30 days" },
+];
+
+function openDashboard() {
+  buildRangeTabs();
+  els.appView.hidden = true;
+  els.dashboardView.hidden = false;
+  renderDashboard();
+}
+
+function closeDashboard() {
+  els.dashboardView.hidden = true;
+  els.appView.hidden = false;
+}
+
+function buildRangeTabs() {
+  els.dashboardRanges.replaceChildren(
+    ...RANGES.map(({ key, label }) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className =
+        "dashboard__range" + (key === dashboardRange ? " is-active" : "");
+      btn.textContent = label;
+      btn.onclick = () => {
+        dashboardRange = key;
+        buildRangeTabs();
+        renderDashboard();
+      };
+      return btn;
+    })
+  );
+}
+
+/** 当前范围的起始时间戳（含今天在内的自然日） */
+function rangeCutoff() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  if (dashboardRange === "today") return d.getTime();
+  return d.getTime() - (Number(dashboardRange) - 1) * 86400000;
+}
+
+function rangeDays() {
+  return dashboardRange === "today" ? 1 : Number(dashboardRange);
+}
+
+function renderDashboard() {
+  const cutoff = rangeCutoff();
+  const events = clickEvents.filter((e) => e.ts >= cutoff);
+  const sections = [makeStatCards(events)];
+  // “今天”只有一天，趋势图无意义，跳过
+  if (dashboardRange !== "today") sections.push(makeChartSection(events));
+  sections.push(makeTableSection(events));
+  els.dashboardBody.replaceChildren(...sections);
+}
+
+function makeDashSection(title) {
+  const section = document.createElement("section");
+  section.className = "dashboard__section";
+  const h = document.createElement("h2");
+  h.className = "dashboard__section-title";
+  h.textContent = title;
+  section.append(h);
+  return section;
+}
+
+/** 概要卡片：总点击 / 用到的书签数 / 日均 */
+function makeStatCards(events) {
+  const total = events.length;
+  const unique = new Set(events.map((e) => e.url)).size;
+  const avg = (total / rangeDays()).toFixed(1);
+
+  const wrap = document.createElement("div");
+  wrap.className = "dashboard__stats";
+  for (const [value, label] of [
+    [total, "Total clicks"],
+    [unique, "Bookmarks used"],
+    [avg, "Avg / day"],
+  ]) {
+    const card = document.createElement("div");
+    card.className = "stat-card";
+    const v = document.createElement("div");
+    v.className = "stat-card__value";
+    v.textContent = value;
+    const l = document.createElement("div");
+    l.className = "stat-card__label";
+    l.textContent = label;
+    card.append(v, l);
+    wrap.append(card);
+  }
+  return wrap;
+}
+
+/** 图表：按自然日的点击量柱状图 */
+function makeChartSection(events) {
+  const section = makeDashSection("Trend");
+  const days = rangeDays();
+  const start = rangeCutoff();
+  const buckets = Array.from({ length: days }, (_, i) => ({
+    ts: start + i * 86400000,
+    count: 0,
+  }));
+  for (const e of events) {
+    const idx = Math.floor((e.ts - start) / 86400000);
+    if (idx >= 0 && idx < days) buckets[idx].count++;
+  }
+  const max = Math.max(1, ...buckets.map((b) => b.count));
+
+  const chart = document.createElement("div");
+  chart.className = "chart";
+  buckets.forEach((b, i) => {
+    const col = document.createElement("div");
+    col.className = "chart__col";
+
+    const barWrap = document.createElement("div");
+    barWrap.className = "chart__bar-wrap";
+    const bar = document.createElement("div");
+    bar.className = "chart__bar";
+    bar.style.height = `${(b.count / max) * 100}%`;
+    bar.title = `${formatDay(b.ts)} · ${b.count} clicks`;
+    if (b.count) {
+      const cnt = document.createElement("span");
+      cnt.className = "chart__count";
+      cnt.textContent = b.count;
+      bar.append(cnt);
+    }
+    barWrap.append(bar);
+
+    const label = document.createElement("span");
+    label.className = "chart__label";
+    // 天数多时稀疏显示标签，避免拥挤
+    label.textContent =
+      days <= 7 || i === 0 || i === days - 1 || (i + 1) % 5 === 0
+        ? formatDay(b.ts)
+        : "";
+
+    col.append(barWrap, label);
+    chart.append(col);
+  });
+  section.append(chart);
+  return section;
+}
+
+/** 表格：按书签聚合的点击次数与最近点击时间 */
+function makeTableSection(events) {
+  const section = makeDashSection("By bookmark");
+  const map = new Map();
+  for (const e of events) {
+    const cur = map.get(e.url) || { url: e.url, title: e.title, count: 0, last: 0 };
+    cur.count++;
+    cur.last = Math.max(cur.last, e.ts);
+    cur.title = e.title; // 取最近一次的标题
+    map.set(e.url, cur);
+  }
+  const rows = [...map.values()].sort((a, b) => b.count - a.count);
+  if (!rows.length) {
+    section.append(makeEmpty("No clicks in this range"));
+    return section;
+  }
+
+  const table = document.createElement("table");
+  table.className = "stat-table";
+  table.innerHTML =
+    "<thead><tr><th>Bookmark</th><th>Clicks</th><th>Last clicked</th></tr></thead>";
+  const tbody = document.createElement("tbody");
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+
+    const name = document.createElement("td");
+    name.className = "stat-table__name";
+    name.append(makeFavicon(r.url, "stat-table__icon"));
+    const t = document.createElement("span");
+    t.textContent = r.title;
+    t.title = r.url;
+    name.append(t);
+
+    const count = document.createElement("td");
+    count.className = "stat-table__num";
+    count.textContent = r.count;
+
+    const last = document.createElement("td");
+    last.className = "stat-table__time";
+    last.textContent = formatDateTime(r.last);
+
+    tr.append(name, count, last);
+    tbody.append(tr);
+  }
+  table.append(tbody);
+  section.append(table);
+  return section;
+}
+
+function formatDay(ts) {
+  const d = new Date(ts);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function formatDateTime(ts) {
+  const d = new Date(ts);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(
+    d.getMinutes()
+  )}`;
 }
 
 /* ------------------------------ 错误 ------------------------------ */
