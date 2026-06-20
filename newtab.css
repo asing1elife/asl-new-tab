@@ -460,18 +460,9 @@ svg {
   gap: 12px;
 }
 
-/* 空目录占位提示 */
-.grid__empty {
-  grid-column: 1 / -1;
-  padding: 12px 14px;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
 /* ---------- Cards ---------- */
 .card {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 11px;
@@ -492,6 +483,7 @@ svg {
   border-color: var(--accent);
   box-shadow: var(--shadow-md);
   transform: translateY(-2px);
+  z-index: 1; /* 让溢出到角外的操作浮层盖在相邻卡片之上 */
 }
 
 .card.is-dragging {
@@ -511,8 +503,6 @@ svg {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg);
-  border-radius: 6px;
 }
 
 .card__icon img {
@@ -533,6 +523,48 @@ svg {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 卡片操作：靠右上、距右边 10px，仅顶部溢出一半，压在卡片上沿 */
+.card__actions {
+  position: absolute;
+  top: 0;
+  right: 10px;
+  transform: translateY(-50%);
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--card-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.card:hover .card__actions {
+  display: inline-flex;
+}
+
+/* 网格末尾的「新增书签」入口：虚线、弱化立体感，与书签卡同样的图标+文字左对齐布局 */
+.card--add {
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px dashed var(--border);
+  box-shadow: none;
+  font: inherit;
+  text-align: left; /* button 默认居中，改回与书签卡一致的左对齐 */
+}
+
+.card--add:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.card--add .card__add-icon {
+  width: 16px;
+  height: 16px;
 }
 
 /* ---------- Empty / states ---------- */
@@ -586,6 +618,21 @@ svg {
 .modal__body {
   padding: 14px 20px 18px;
   font-size: 14px;
+}
+
+.modal__field {
+  display: block;
+}
+
+.modal__field + .modal__field {
+  margin-top: 12px;
+}
+
+.modal__label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
 }
 
 .modal__input {

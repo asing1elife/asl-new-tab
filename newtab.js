@@ -30,6 +30,7 @@ const ICONS = {
     '<path d="M12 10v6"/><path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
   circlePlus:
     '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
 };
 
 function icon(name, cls) {
@@ -167,6 +168,7 @@ function indexNodes(node) {
 function buildSections(folder) {
   const sections = [];
 
+  // 顶层目录不允许直接加书签，故仅在已有直属书签时渲染根分区
   const direct = (folder.children || []).filter(isBookmark);
   if (direct.length)
     sections.push({
@@ -388,9 +390,13 @@ function setupContentDnd() {
     if (cdrag.type === "card") {
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
-      const cards = cdrag.grid.querySelectorAll(".card:not(.is-dragging)");
+      // 仅可拖拽的书签卡参与排序，排除末尾的「新增书签」并让其始终保持在最后
+      const cards = cdrag.grid.querySelectorAll(
+        ".card--draggable:not(.is-dragging)"
+      );
+      const addCard = cdrag.grid.querySelector(".card--add");
       const after = gridElementAfter(cards, e.clientX, e.clientY);
-      if (after == null) cdrag.grid.appendChild(cdrag.el);
+      if (after == null) cdrag.grid.insertBefore(cdrag.el, addCard);
       else if (after !== cdrag.el) cdrag.grid.insertBefore(cdrag.el, after);
     } else if (cdrag.type === "section") {
       e.preventDefault();
@@ -552,6 +558,7 @@ function renderSections(sections, rootLabel, rootIcon) {
           parentId: section.parentId,
           draggableHeading: isSub, // 仅子目录分区可整段拖动排序；根分区即当前目录本身
           withAdd: isSub, // 子目录支持继续新增子目录（根分区的新增在顶部）
+          canAddBookmark: isSub, // 仅子目录可加书签；顶层目录禁止
         },
       })
     );
@@ -586,14 +593,9 @@ function makeGroup({ title, tooltip, iconName, depth = 0, cards, meta }) {
 
   const grid = document.createElement("div");
   grid.className = "grid";
-  if (cards.length) {
-    grid.append(...cards);
-  } else {
-    const ph = document.createElement("div");
-    ph.className = "grid__empty";
-    ph.textContent = "暂无书签";
-    grid.append(ph);
-  }
+  grid.append(...cards);
+  // 子目录网格末尾追加「新增书签」入口；顶层目录不允许直接加书签
+  if (meta?.canAddBookmark) grid.append(makeAddBookmarkCard(meta.folderId));
 
   if (meta) {
     group.dataset.folderId = meta.folderId;
@@ -623,8 +625,40 @@ function makeBookmarkCard(bookmark, draggable = false) {
   label.className = "card__label";
   label.textContent = bookmark.title || bookmark.url;
 
-  card.append(makeFavicon(bookmark.url, "card__icon"), label);
+  // 悬浮卡片时右上角显示编辑/删除（用 span 避免在 <a> 内嵌套交互元素并阻止跳转）
+  const actions = document.createElement("span");
+  actions.className = "card__actions";
+  actions.append(
+    makeActionButton("squarePen", "编辑书签", "edit", () =>
+      openBookmarkEditDialog(bookmark)
+    ),
+    makeActionButton("trash", "删除书签", "danger", () =>
+      openBookmarkDeleteDialog(bookmark)
+    )
+  );
+
+  card.append(makeFavicon(bookmark.url, "card__icon"), label, actions);
   return card;
+}
+
+/** 网格末尾的「新增书签」入口，作用于指定目录 */
+function makeAddBookmarkCard(folderId) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "card card--add";
+
+  // 与真实书签卡保持一致的「图标 + 文字」左对齐布局
+  const iconWrap = document.createElement("span");
+  iconWrap.className = "card__icon";
+  iconWrap.append(icon("plus", "card__add-icon"));
+
+  const label = document.createElement("span");
+  label.className = "card__label";
+  label.textContent = "新增书签";
+
+  btn.append(iconWrap, label);
+  btn.addEventListener("click", () => openBookmarkCreateDialog(folderId));
+  return btn;
 }
 
 /** 构造一个 favicon 容器：加载失败时回退为 Lucide globe 图标 */
@@ -841,6 +875,93 @@ function openDeleteDialog(folderId, title) {
     },
     onConfirm() {
       chrome.bookmarks.removeTree(folderId); // 经 onRemoved 监听触发整页重渲染
+    },
+  });
+}
+
+/** 构造一个「标签 + 输入框」字段，返回 { wrap, input } */
+function makeField(labelText, value, placeholder) {
+  const wrap = document.createElement("label");
+  wrap.className = "modal__field";
+  const span = document.createElement("span");
+  span.className = "modal__label";
+  span.textContent = labelText;
+  const input = document.createElement("input");
+  input.className = "modal__input";
+  input.type = "text";
+  input.value = value;
+  input.placeholder = placeholder;
+  input.maxLength = 2000;
+  wrap.append(span, input);
+  return { wrap, input };
+}
+
+function openBookmarkEditDialog(bookmark) {
+  showModal({
+    title: "编辑书签",
+    confirmText: "保存",
+    buildBody(body, ctx) {
+      const name = makeField("名称", bookmark.title || "", "书签名称");
+      const url = makeField("链接", bookmark.url || "", "https://");
+      body.append(name.wrap, url.wrap);
+      ctx.nameInput = name.input;
+      ctx.urlInput = url.input;
+      requestAnimationFrame(() => {
+        name.input.focus();
+        name.input.select();
+      });
+    },
+    onConfirm(ctx) {
+      const title = ctx.nameInput.value.trim();
+      const url = ctx.urlInput.value.trim();
+      if (!url) {
+        ctx.urlInput.focus();
+        return false; // 链接不能为空，保持弹窗打开
+      }
+      chrome.bookmarks.update(bookmark.id, { title, url }); // 经 onChanged 触发重渲染
+    },
+  });
+}
+
+function openBookmarkCreateDialog(folderId) {
+  showModal({
+    title: "新增书签",
+    confirmText: "创建",
+    buildBody(body, ctx) {
+      const name = makeField("名称", "", "书签名称");
+      const url = makeField("链接", "", "https://");
+      body.append(name.wrap, url.wrap);
+      ctx.nameInput = name.input;
+      ctx.urlInput = url.input;
+      requestAnimationFrame(() => name.input.focus());
+    },
+    onConfirm(ctx) {
+      const title = ctx.nameInput.value.trim();
+      const url = ctx.urlInput.value.trim();
+      if (!url) {
+        ctx.urlInput.focus();
+        return false; // 链接不能为空，保持弹窗打开
+      }
+      chrome.bookmarks.create({ parentId: folderId, title, url }); // 经 onCreated 触发重渲染
+    },
+  });
+}
+
+function openBookmarkDeleteDialog(bookmark) {
+  showModal({
+    title: "删除书签",
+    confirmText: "删除",
+    confirmClass: "modal__btn--danger",
+    buildBody(body) {
+      const p = document.createElement("p");
+      p.className = "modal__hint";
+      const strong = document.createElement("strong");
+      strong.textContent = bookmark.title || bookmark.url;
+      p.append("确定要删除书签 ", strong, " 吗？此操作无法撤销。");
+      body.append(p);
+    },
+    onConfirm() {
+      chrome.bookmarks.remove(bookmark.id); // 经 onRemoved 触发重渲染
     },
   });
 }
