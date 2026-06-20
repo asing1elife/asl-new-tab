@@ -99,6 +99,7 @@ setupBookmarkListeners();
 async function init() {
   els.refreshWallpaperBtn.replaceChildren(icon("refreshCw"));
   els.refreshWallpaperBtn.onclick = refreshWallpaper;
+  els.refreshWallpaperBtn.style.display = "none"; // 默认隐藏，配置 Key 后才显示
   els.settingsBtn.replaceChildren(icon("settings"));
   els.settingsBtn.onclick = openSettingsModal;
   els.searchIcon.replaceChildren(icon("search"));
@@ -106,6 +107,7 @@ async function init() {
   els.addFolderBtn.onclick = () => openCreateDialog();
 
   loadWallpaper(); // fire-and-forget — loads in parallel with bookmark tree
+  syncWallpaperControls(); // 按是否配置 Key 控制刷新按钮显隐
 
   let barNode;
   try {
@@ -1130,6 +1132,12 @@ async function loadWallpaper() {
   }
 }
 
+/** 刷新按钮仅在已配置 Key 时显示（无 Key 时与设置按钮功能重复） */
+async function syncWallpaperControls() {
+  const hasKey = !!(await getApiKey());
+  els.refreshWallpaperBtn.style.display = hasKey ? "" : "none";
+}
+
 /** 刷新按钮：清缓存 → 拉新图 → 缓存。无 Key 时跳转设置。 */
 async function refreshWallpaper() {
   const key = await getApiKey();
@@ -1137,8 +1145,15 @@ async function refreshWallpaper() {
     openSettingsModal();
     return;
   }
-  await clearWallpaperCache();
-  await fetchAndCache(key);
+  els.refreshWallpaperBtn.classList.add("is-spinning");
+  els.refreshWallpaperBtn.disabled = true;
+  try {
+    await clearWallpaperCache();
+    await fetchAndCache(key);
+  } finally {
+    els.refreshWallpaperBtn.classList.remove("is-spinning");
+    els.refreshWallpaperBtn.disabled = false;
+  }
 }
 
 /** 从 Unsplash 拉取一张新壁纸 → 下载本体转 data URL → 渲染 → 缓存 */
@@ -1158,8 +1173,8 @@ async function fetchAndCache(apiKey) {
 
 async function getApiKey() {
   try {
-    const r = await chrome.storage.local.get(WP.API_KEY);
-    return r[WP.API_KEY] || "";
+    const all = await chrome.storage.local.get(null);
+    return all[WP.API_KEY] || "";
   } catch {
     return "";
   }
@@ -1246,9 +1261,7 @@ function blobToDataUrl(blob) {
 /* ---------- 渲染 ---------- */
 
 function applyWallpaper(url) {
-  const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const overlay = dark ? "rgba(0,0,0,0.32)" : "rgba(0,0,0,0.08)";
-  document.body.style.backgroundImage = `linear-gradient(${overlay}, ${overlay}), url("${url}")`;
+  document.body.style.backgroundImage = `url("${url}")`;
   document.body.style.backgroundSize = "cover";
   document.body.style.backgroundPosition = "center";
   document.body.style.backgroundRepeat = "no-repeat";
@@ -1309,6 +1322,7 @@ async function openSettingsModal() {
           await clearApiKey();
           await clearWallpaperCache();
           clearWallpaper();
+          syncWallpaperControls();
           ctx.close();
         });
         ctx.footer.insertBefore(remove, ctx.confirmBtn);
@@ -1327,6 +1341,7 @@ async function openSettingsModal() {
         await clearWallpaperCache();
         clearWallpaper();
       }
+      syncWallpaperControls();
     },
   });
 }

@@ -6,6 +6,7 @@
   --content-bg: #ffffff;
   --card-bg: #ffffff;
   --border: #e6e8eb;
+  --card-border: rgba(255, 255, 255, 0.5); /* 主卡片半透明白边，贴合毛玻璃 */
   --tree-line: #d3d9e2;
   --text: #1f2329;
   --text-muted: #8a9099;
@@ -28,6 +29,7 @@
     --content-bg: #1f2022;
     --card-bg: #26282b;
     --border: #2e3033;
+    --card-border: rgba(255, 255, 255, 0.12); /* 暗色下白色微光边 */
     --tree-line: #3a3d42;
     --text: #e8e9ea;
     --text-muted: #8a9099;
@@ -74,9 +76,9 @@ svg {
 
 /* ---------- Sidebar ---------- */
 .sidebar {
-  background: color-mix(in srgb, var(--sidebar-bg) 82%, transparent);
+  background: color-mix(in srgb, var(--sidebar-bg) 62%, transparent);
   backdrop-filter: blur(8px);
-  border: 1px solid var(--border);
+  border: 1px solid var(--card-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md);
   display: flex;
@@ -126,6 +128,20 @@ svg {
 .sidebar__icon-btn svg {
   width: 16px;
   height: 16px;
+}
+
+.sidebar__icon-btn:disabled {
+  cursor: default;
+}
+
+.sidebar__icon-btn.is-spinning svg {
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .folder-list {
@@ -323,9 +339,9 @@ svg {
 
 /* ---------- Content ---------- */
 .content {
-  background: color-mix(in srgb, var(--content-bg) 82%, transparent);
+  background: color-mix(in srgb, var(--content-bg) 62%, transparent);
   backdrop-filter: blur(8px);
-  border: 1px solid var(--border);
+  border: 1px solid var(--card-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md);
   display: flex;
@@ -339,7 +355,7 @@ svg {
   justify-content: space-between;
   gap: 16px;
   padding: 20px 24px 16px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--card-border);
 }
 
 .content__heading {
