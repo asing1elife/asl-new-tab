@@ -22,6 +22,10 @@ const ICONS = {
   globe:
     '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  squarePen:
+    '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/>',
+  trash:
+    '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
 };
 
 function icon(name, cls) {
@@ -43,6 +47,7 @@ const els = {
   searchIcon: document.getElementById("searchIcon"),
   folderList: document.getElementById("folderList"),
   contentTitle: document.getElementById("contentTitle"),
+  contentActions: document.getElementById("contentActions"),
   contentBody: document.getElementById("contentBody"),
   search: document.getElementById("searchInput"),
 };
@@ -107,6 +112,7 @@ async function init() {
   } else {
     state.currentEntryId = null;
     els.contentTitle.textContent = "";
+    els.contentActions.replaceChildren();
     els.contentBody.replaceChildren(
       makeEmpty("Click a bookmark on the left to open it in a new tab")
     );
@@ -508,6 +514,10 @@ function selectEntry(entryId) {
   if (!folder) return;
   const label = folder.title || "Untitled folder";
   els.contentTitle.textContent = label;
+  // 顶部目录名后常驻显示编辑/删除，作用于当前选中目录
+  els.contentActions.replaceChildren(
+    makeFolderActions(folder, "content__actions-row")
+  );
   renderSections(buildSections(folder), label, "folder");
 }
 
@@ -555,6 +565,13 @@ function makeGroup({ title, tooltip, iconName, depth = 0, cards, meta }) {
   const text = document.createElement("span");
   text.textContent = title;
   heading.append(icon(iconName, "group__icon"), text);
+
+  // 该分区对应一个真实目录时，悬浮标题显示编辑/删除（搜索结果分区无 folderId，跳过）
+  if (meta?.folderId) {
+    heading.append(
+      makeFolderActions({ id: meta.folderId, title }, "group__actions")
+    );
+  }
 
   const grid = document.createElement("div");
   grid.className = "grid";
@@ -617,6 +634,159 @@ function faviconUrl(pageUrl) {
   return url.toString();
 }
 
+/* --------------------------- 目录编辑 / 删除 --------------------------- */
+
+/** 一个图标动作按钮（用 span 而非 button，避免嵌套在侧栏 <button> 内的非法结构） */
+function makeActionButton(iconName, label, variant, onClick) {
+  const btn = document.createElement("span");
+  btn.className = `action-btn action-btn--${variant}`;
+  btn.setAttribute("role", "button");
+  btn.setAttribute("tabindex", "0");
+  btn.setAttribute("aria-label", label);
+  btn.title = label;
+  btn.append(icon(iconName));
+
+  const fire = (e) => {
+    e.preventDefault();
+    e.stopPropagation(); // 不触发所在条目的选中 / 拖拽
+    onClick();
+  };
+  btn.addEventListener("click", fire);
+  // 阻止从按钮处发起父元素的拖拽
+  btn.addEventListener("mousedown", (e) => e.stopPropagation());
+  btn.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") fire(e);
+  });
+  return btn;
+}
+
+/** 一组「重命名 + 删除」按钮，作用于指定目录 {id, title} */
+function makeFolderActions(folder, className) {
+  const wrap = document.createElement("span");
+  wrap.className = className;
+  const title = folder.title || "Untitled folder";
+  wrap.append(
+    makeActionButton("squarePen", "重命名目录", "edit", () =>
+      openRenameDialog(folder.id, folder.title || "")
+    ),
+    makeActionButton("trash", "删除目录", "danger", () =>
+      openDeleteDialog(folder.id, title)
+    )
+  );
+  return wrap;
+}
+
+/**
+ * 通用模态弹窗。buildBody(body, ctx) 填充内容；onConfirm(ctx) 返回 false 可阻止关闭。
+ * 支持 ESC 取消、Enter 确认、点击遮罩取消。
+ */
+function showModal({ title, confirmText, confirmClass, buildBody, onConfirm }) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+
+  const modal = document.createElement("div");
+  modal.className = "modal";
+
+  const header = document.createElement("div");
+  header.className = "modal__header";
+  header.textContent = title;
+
+  const body = document.createElement("div");
+  body.className = "modal__body";
+
+  const footer = document.createElement("div");
+  footer.className = "modal__footer";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "modal__btn";
+  cancelBtn.textContent = "取消";
+
+  const confirmBtn = document.createElement("button");
+  confirmBtn.type = "button";
+  confirmBtn.className = `modal__btn ${confirmClass || "modal__btn--primary"}`;
+  confirmBtn.textContent = confirmText || "确定";
+
+  footer.append(cancelBtn, confirmBtn);
+  modal.append(header, body, footer);
+  overlay.append(modal);
+  document.body.append(overlay);
+
+  const ctx = { confirmBtn, close };
+  buildBody(body, ctx);
+
+  function close() {
+    overlay.remove();
+    document.removeEventListener("keydown", onKey);
+  }
+  function confirm() {
+    if (onConfirm(ctx) !== false) close();
+  }
+  function onKey(e) {
+    if (e.key === "Escape") close();
+    else if (e.key === "Enter") confirm();
+  }
+
+  cancelBtn.addEventListener("click", close);
+  confirmBtn.addEventListener("click", confirm);
+  overlay.addEventListener("mousedown", (e) => {
+    if (e.target === overlay) close();
+  });
+  document.addEventListener("keydown", onKey);
+}
+
+function openRenameDialog(folderId, currentTitle) {
+  showModal({
+    title: "重命名目录",
+    confirmText: "保存",
+    buildBody(body, ctx) {
+      const input = document.createElement("input");
+      input.className = "modal__input";
+      input.type = "text";
+      input.value = currentTitle;
+      input.maxLength = 200;
+      body.append(input);
+      ctx.input = input;
+      requestAnimationFrame(() => {
+        input.focus();
+        input.select();
+      });
+    },
+    onConfirm(ctx) {
+      const name = ctx.input.value.trim();
+      if (!name) {
+        ctx.input.focus();
+        return false; // 空名称不允许，保持弹窗打开
+      }
+      if (name !== currentTitle) chrome.bookmarks.update(folderId, { title: name });
+      // 变更经 onChanged 监听触发整页重渲染
+    },
+  });
+}
+
+function openDeleteDialog(folderId, title) {
+  showModal({
+    title: "删除目录",
+    confirmText: "删除",
+    confirmClass: "modal__btn--danger",
+    buildBody(body) {
+      const p = document.createElement("p");
+      p.className = "modal__hint";
+      const strong = document.createElement("strong");
+      strong.textContent = title;
+      p.append(
+        "确定要删除目录 ",
+        strong,
+        " 吗？该目录下的所有书签和子目录都会被一并删除，此操作无法撤销。"
+      );
+      body.append(p);
+    },
+    onConfirm() {
+      chrome.bookmarks.removeTree(folderId); // 经 onRemoved 监听触发整页重渲染
+    },
+  });
+}
+
 /* ------------------------------ 搜索 ------------------------------ */
 
 function onSearch() {
@@ -634,6 +804,7 @@ function onSearch() {
 
   highlightSidebar(null);
   els.contentTitle.textContent = `Search “${raw}”`;
+  els.contentActions.replaceChildren(); // 搜索视图无目录操作
   els.contentBody.replaceChildren();
 
   if (matches.length === 0) {

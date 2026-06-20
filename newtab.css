@@ -195,6 +195,40 @@ svg {
   color: var(--text-muted);
 }
 
+/* ---------- 图标操作按钮（顶部标题 / 分区标题共用） ---------- */
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.action-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* 编辑默认绿色、删除默认红色，悬浮时叠加同色淡底 */
+.action-btn--edit {
+  color: #30a46c;
+}
+
+.action-btn--edit:hover {
+  background: rgba(48, 164, 108, 0.14);
+}
+
+.action-btn--danger {
+  color: #e5484d;
+}
+
+.action-btn--danger:hover {
+  background: rgba(229, 72, 77, 0.14);
+}
+
 /* ---------- Content ---------- */
 .content {
   background: var(--content-bg);
@@ -215,12 +249,31 @@ svg {
   border-bottom: 1px solid var(--border);
 }
 
+.content__heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0; /* 允许标题在空间不足时省略，而非挤压按钮 */
+}
+
 .content__title {
   font-size: 18px;
   font-weight: 700;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 顶部目录名后的操作按钮：常驻显示 */
+.content__actions:empty {
+  display: none;
+}
+
+.content__actions-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .search {
@@ -292,6 +345,8 @@ svg {
   font-weight: 600;
   color: var(--text);
   margin-bottom: 14px;
+  /* 预留操作按钮高度，悬浮显示图标时标题行高不变，避免内容抽动 */
+  min-height: 24px;
 }
 
 .group:not(.is-nested) > .group__title {
@@ -318,10 +373,27 @@ svg {
   transform: translateY(-50%);
 }
 
+/* 分区标题的操作：默认隐藏，悬浮标题时显示在目录名之后 */
+.group__actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+}
+
+.group__title:hover .group__actions,
+.group__actions:focus-within {
+  display: inline-flex;
+}
+
+/* 有操作按钮时标题宽度自适应，使悬浮区域贴合内容 */
+.group__title {
+  width: fit-content;
+}
+
 .group__title.is-draggable {
   cursor: grab;
   user-select: none;
-  width: fit-content;
 }
 
 .group__title.is-draggable:active {
@@ -426,4 +498,129 @@ svg {
   width: 40px;
   height: 40px;
   opacity: 0.5;
+}
+
+/* ---------- Modal（重命名 / 删除确认） ---------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(16, 24, 40, 0.45);
+  animation: modal-fade 0.12s ease;
+}
+
+.modal {
+  width: 100%;
+  max-width: 380px;
+  background: var(--content-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: modal-pop 0.14s ease;
+}
+
+.modal__header {
+  padding: 18px 20px 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.modal__body {
+  padding: 14px 20px 18px;
+  font-size: 14px;
+}
+
+.modal__input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.modal__input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.modal__hint {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.modal__hint strong {
+  color: var(--text);
+}
+
+.modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 0 20px 18px;
+}
+
+.modal__btn {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, filter 0.12s ease;
+}
+
+.modal__btn:hover {
+  background: var(--hover);
+}
+
+.modal__btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.modal__btn--primary:hover {
+  background: var(--accent);
+  filter: brightness(1.06);
+}
+
+.modal__btn--danger {
+  background: #e5484d;
+  border-color: #e5484d;
+  color: #fff;
+}
+
+.modal__btn--danger:hover {
+  filter: brightness(1.06);
+}
+
+@keyframes modal-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
