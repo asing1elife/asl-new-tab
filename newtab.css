@@ -1,7 +1,7 @@
 :root {
   --bg: #eef1f6;
-  --bg-grad-from: #e9edf4;
-  --bg-grad-to: #f4f6f9;
+  --bg-grad-from: #f7a8c4;
+  --bg-grad-to: #ffb347;
   --sidebar-bg: #ffffff;
   --content-bg: #ffffff;
   --card-bg: #ffffff;
@@ -22,8 +22,8 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #141517;
-    --bg-grad-from: #121315;
-    --bg-grad-to: #1b1c1f;
+    --bg-grad-from: #5c2040;
+    --bg-grad-to: #6b3a1f;
     --sidebar-bg: #1f2022;
     --content-bg: #1f2022;
     --card-bg: #26282b;
@@ -73,7 +73,8 @@ svg {
 
 /* ---------- Sidebar ---------- */
 .sidebar {
-  background: var(--sidebar-bg);
+  background: color-mix(in srgb, var(--sidebar-bg) 82%, transparent);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md);
@@ -292,7 +293,8 @@ svg {
 
 /* ---------- Content ---------- */
 .content {
-  background: var(--content-bg);
+  background: color-mix(in srgb, var(--content-bg) 82%, transparent);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md);
