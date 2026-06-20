@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>新标签页</title>
+  <link rel="stylesheet" href="newtab.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <header class="sidebar__header">
+        <h1 class="sidebar__title">书签栏</h1>
+      </header>
+      <nav id="folderList" class="folder-list" aria-label="书签目录"></nav>
+    </aside>
+
+    <main class="content">
+      <header class="content__header">
+        <h2 id="contentTitle" class="content__title"></h2>
+        <input
+          id="searchInput"
+          class="search"
+          type="search"
+          placeholder="搜索书签…"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </header>
+      <section id="contentBody" class="content__body" aria-live="polite"></section>
+    </main>
+  </div>
+
+  <template id="bookmarkItemTpl">
+    <a class="card card--bookmark" target="_blank" rel="noopener">
+      <img class="card__icon" alt="" width="20" height="20" />
+      <span class="card__label"></span>
+    </a>
+  </template>
+
+  <template id="folderCardTpl">
+    <button class="card card--folder" type="button">
+      <span class="card__icon card__icon--folder" aria-hidden="true">📁</span>
+      <span class="card__label"></span>
+      <span class="card__count"></span>
+    </button>
+  </template>
+
+  <script src="newtab.js"></script>
+</body>
+</html>
