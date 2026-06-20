@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ASL New Tab",
   "version": "1.0.0",
-  "description": "A custom new tab page that reads your native bookmarks bar: folders on the left, bookmarks on the right, and clicking a bookmark opens it in a new tab.",
+  "description": "Replace new tab with your native bookmarks: folders on the left, bookmarks on the right, click to open.",
   "permissions": ["bookmarks", "favicon"],
   "chrome_url_overrides": {
     "newtab": "newtab.html"
