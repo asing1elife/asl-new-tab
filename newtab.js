@@ -84,6 +84,7 @@ const cdrag = {
 };
 // 由本扩展自己发起的 move，其 onMoved 回调应跳过整页刷新（避免闪烁/打断）
 const selfMoves = new Set();
+let dropTargetGroup = null; // 跨容器拖拽时高亮的目标分组
 
 init();
 setupSidebarDnd();
@@ -288,10 +289,20 @@ function setupSidebarDnd() {
     item.classList.add("is-dragging");
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", drag.id); // 抑制 <a> 默认的链接拖拽
+    e.dataTransfer.setData("application/x-sidebar-item", drag.id);
   });
 
   list.addEventListener("dragover", (e) => {
-    if (!drag.el) return;
+    if (!drag.el) {
+      // 内容区条目拖入侧栏：允许放置并高亮
+      if (cdrag.type) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        list.classList.add("is-drop-target");
+      }
+      return;
+    }
+    list.classList.remove("is-drop-target");
     e.preventDefault(); // 允许放置
     e.dataTransfer.dropEffect = "move";
     const candidates = list.querySelectorAll(
@@ -303,10 +314,37 @@ function setupSidebarDnd() {
   });
 
   list.addEventListener("drop", (e) => {
-    if (drag.el) e.preventDefault(); // 阻止 <a> 默认导航
+    if (drag.el) {
+      e.preventDefault(); // 阻止 <a> 默认导航
+      return;
+    }
+    // 内容区条目拖放到侧栏：移动到书签栏根目录
+    if (cdrag.type && cdrag.id) {
+      e.preventDefault();
+      list.classList.remove("is-drop-target");
+      if (cdrag.el) cdrag.el.classList.remove("is-dragging");
+      chrome.bookmarks.move(cdrag.id, { parentId: BOOKMARK_BAR_ID });
+      // 重置内容区拖拽状态，避免其 dragend 再做排序
+      cdrag.type = null;
+      cdrag.el = null;
+      cdrag.id = null;
+    }
+  });
+
+  list.addEventListener("dragleave", (e) => {
+    // 拖拽离开侧栏时清理高亮
+    if (!list.contains(e.relatedTarget)) {
+      list.classList.remove("is-drop-target");
+    }
   });
 
   list.addEventListener("dragend", () => {
+    // 清理跨容器拖拽的高亮
+    if (dropTargetGroup) {
+      dropTargetGroup.classList.remove("is-drop-target");
+      dropTargetGroup = null;
+    }
+    list.classList.remove("is-drop-target");
     if (!drag.el) return;
     drag.el.classList.remove("is-dragging");
 
@@ -420,14 +458,50 @@ function setupContentDnd() {
       if (after) body.insertBefore(cdrag.group, after);
       else if (sibs.length)
         body.insertBefore(cdrag.group, sibs[sibs.length - 1].nextElementSibling);
+    } else if (!cdrag.type && drag.id) {
+      // 侧栏条目拖入内容区：高亮目标分组（仅限有 folderId 的分组）
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const group = e.target.closest?.(".group");
+      const target = group?.dataset.folderId ? group : null;
+      if (dropTargetGroup && dropTargetGroup !== target) {
+        dropTargetGroup.classList.remove("is-drop-target");
+      }
+      if (target && target !== dropTargetGroup) {
+        target.classList.add("is-drop-target");
+      }
+      dropTargetGroup = target;
     }
   });
 
   body.addEventListener("drop", (e) => {
-    if (cdrag.type) e.preventDefault();
+    if (cdrag.type) {
+      e.preventDefault();
+      return;
+    }
+    // 侧栏条目拖放到内容区分组：移动到该目录下
+    if (drag.id && dropTargetGroup) {
+      e.preventDefault();
+      const targetFolderId = dropTargetGroup.dataset.folderId;
+      if (targetFolderId) {
+        chrome.bookmarks.move(drag.id, { parentId: targetFolderId });
+      }
+      dropTargetGroup.classList.remove("is-drop-target");
+      dropTargetGroup = null;
+      // 重置侧栏拖拽状态，避免其 dragend 再做原地排序
+      drag.el = null;
+      drag.id = null;
+      drag.fromIndex = -1;
+    }
   });
 
   body.addEventListener("dragend", () => {
+    // 清理跨容器拖拽高亮
+    if (dropTargetGroup) {
+      dropTargetGroup.classList.remove("is-drop-target");
+      dropTargetGroup = null;
+    }
+    els.folderList.classList.remove("is-drop-target");
     if (cdrag.type === "card") {
       cdrag.el.classList.remove("is-dragging");
       if (childIndex(cdrag.grid, cdrag.el) !== cdrag.fromIndex) {
