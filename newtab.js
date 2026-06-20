@@ -81,7 +81,9 @@ async function init() {
   } else {
     state.currentEntryId = null;
     els.contentTitle.textContent = "";
-    els.contentBody.replaceChildren(makeEmpty("点击左侧书签即可在新标签页打开"));
+    els.contentBody.replaceChildren(
+      makeEmpty("Click a bookmark on the left to open it in a new tab")
+    );
   }
 
   els.search.oninput = onSearch;
@@ -119,7 +121,7 @@ function buildSections(folder) {
   const walk = (node, path) => {
     for (const child of node.children || []) {
       if (!isFolder(child)) continue;
-      const childPath = [...path, child.title || "未命名目录"];
+      const childPath = [...path, child.title || "Untitled folder"];
       const bms = (child.children || []).filter(isBookmark);
       if (bms.length) sections.push({ path: childPath, bookmarks: bms });
       walk(child, childPath);
@@ -151,7 +153,7 @@ function makeSidebarFolder(folder) {
 
   const label = document.createElement("span");
   label.className = "folder-list__label";
-  label.textContent = folder.title || "未命名目录";
+  label.textContent = folder.title || "Untitled folder";
 
   const cnt = document.createElement("span");
   cnt.className = "folder-list__count";
@@ -196,7 +198,7 @@ function selectEntry(entryId) {
 
   const folder = state.topFolders.find((f) => f.id === entryId);
   if (!folder) return;
-  const label = folder.title || "未命名目录";
+  const label = folder.title || "Untitled folder";
   els.contentTitle.textContent = label;
   renderSections(buildSections(folder), label, "folder");
 }
@@ -206,7 +208,7 @@ function renderSections(sections, rootLabel, rootIcon) {
 
   const usable = sections.filter((s) => s.bookmarks.length > 0);
   if (usable.length === 0) {
-    els.contentBody.appendChild(makeEmpty("这个目录还没有书签"));
+    els.contentBody.appendChild(makeEmpty("No bookmarks in this folder"));
     return;
   }
 
@@ -295,15 +297,15 @@ function onSearch() {
   );
 
   highlightSidebar(null);
-  els.contentTitle.textContent = `搜索 “${raw}”`;
+  els.contentTitle.textContent = `Search “${raw}”`;
   els.contentBody.replaceChildren();
 
   if (matches.length === 0) {
-    els.contentBody.appendChild(makeEmpty("没有匹配的书签"));
+    els.contentBody.appendChild(makeEmpty("No matching bookmarks"));
     return;
   }
   els.contentBody.appendChild(
-    makeGroup(`结果 (${matches.length})`, "search", matches.map(makeBookmarkCard))
+    makeGroup(`Results (${matches.length})`, "search", matches.map(makeBookmarkCard))
   );
 }
 
@@ -325,6 +327,6 @@ function makeEmpty(text) {
 
 function renderError(err) {
   els.contentBody.replaceChildren(
-    makeEmpty(`无法读取书签：${err?.message || err}`)
+    makeEmpty(`Failed to read bookmarks: ${err?.message || err}`)
   );
 }

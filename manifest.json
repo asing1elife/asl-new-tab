@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ASL New Tab",
   "version": "1.0.0",
-  "description": "自定义新标签页 —— 读取原生书签栏，左侧目录右侧书签，点击书签在新标签页打开。",
+  "description": "A custom new tab page that reads your native bookmarks bar: folders on the left, bookmarks on the right, and clicking a bookmark opens it in a new tab.",
   "permissions": ["bookmarks", "favicon"],
   "chrome_url_overrides": {
     "newtab": "newtab.html"
