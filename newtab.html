@@ -12,8 +12,11 @@
   <div class="app">
     <aside class="sidebar">
       <header class="sidebar__brand">
-        <span id="brandIcon" class="sidebar__brand-icon"></span>
         <h1 class="sidebar__brand-text">Bookmarks</h1>
+        <div class="sidebar__brand-actions">
+          <button id="refreshWallpaperBtn" class="sidebar__icon-btn" type="button" title="Refresh wallpaper" aria-label="Refresh wallpaper"></button>
+          <button id="settingsBtn" class="sidebar__icon-btn" type="button" title="Settings" aria-label="Settings"></button>
+        </div>
       </header>
       <nav id="folderList" class="folder-list" aria-label="Bookmark folders"></nav>
       <button id="addFolderBtn" type="button" class="sidebar__add">

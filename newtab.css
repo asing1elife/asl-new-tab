@@ -57,6 +57,7 @@ body {
   color: var(--text);
   background: linear-gradient(160deg, var(--bg-grad-from) 0%, var(--bg-grad-to) 100%);
   -webkit-font-smoothing: antialiased;
+  transition: background-image 0.6s ease;
 }
 
 svg {
@@ -90,20 +91,41 @@ svg {
   padding: 20px 20px 14px;
 }
 
-.sidebar__brand-icon {
-  display: flex;
-  color: var(--accent);
-}
-
-.sidebar__brand-icon svg {
-  width: 22px;
-  height: 22px;
-}
-
 .sidebar__brand-text {
   font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.3px;
+}
+
+.sidebar__brand-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sidebar__icon-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.sidebar__icon-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.sidebar__icon-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .folder-list {

@@ -31,6 +31,10 @@ const ICONS = {
   circlePlus:
     '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  settings:
+    '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  refreshCw:
+    '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/>',
 };
 
 function icon(name, cls) {
@@ -48,7 +52,6 @@ function icon(name, cls) {
 }
 
 const els = {
-  brandIcon: document.getElementById("brandIcon"),
   searchIcon: document.getElementById("searchIcon"),
   folderList: document.getElementById("folderList"),
   addFolderBtn: document.getElementById("addFolderBtn"),
@@ -57,6 +60,8 @@ const els = {
   contentActions: document.getElementById("contentActions"),
   contentBody: document.getElementById("contentBody"),
   search: document.getElementById("searchInput"),
+  refreshWallpaperBtn: document.getElementById("refreshWallpaperBtn"),
+  settingsBtn: document.getElementById("settingsBtn"),
 };
 
 // 模块级状态，每次 init 重建
@@ -92,10 +97,15 @@ setupContentDnd();
 setupBookmarkListeners();
 
 async function init() {
-  els.brandIcon.replaceChildren(icon("compass"));
+  els.refreshWallpaperBtn.replaceChildren(icon("refreshCw"));
+  els.refreshWallpaperBtn.onclick = refreshWallpaper;
+  els.settingsBtn.replaceChildren(icon("settings"));
+  els.settingsBtn.onclick = openSettingsModal;
   els.searchIcon.replaceChildren(icon("search"));
   els.addFolderIcon.replaceChildren(icon("folderPlus"));
   els.addFolderBtn.onclick = () => openCreateDialog();
+
+  loadWallpaper(); // fire-and-forget — loads in parallel with bookmark tree
 
   let barNode;
   try {
@@ -860,7 +870,7 @@ function showModal({ title, confirmText, confirmClass, buildBody, onConfirm }) {
   overlay.append(modal);
   document.body.append(overlay);
 
-  const ctx = { confirmBtn, close };
+  const ctx = { confirmBtn, footer, close };
   buildBody(body, ctx);
 
   function close() {
@@ -1098,6 +1108,230 @@ function makeEmpty(text) {
   wrap.append(t);
   return wrap;
 }
+
+/* ------------------------------ Unsplash 壁纸 ------------------------------ */
+
+const WP = {
+  API_KEY: "wallpaper_key",
+  CACHE_DATA: "wallpaper_cache_data", // 图片本体的 base64 data URL，刷新时离线恢复
+  CACHE_TS: "wallpaper_cache_ts",
+  ENDPOINT: "https://api.unsplash.com/photos/random",
+  QUERY: "orientation=landscape&query=landscape",
+};
+
+/**
+ * 页面加载：仅从缓存恢复壁纸，不做网络请求。
+ * 手动刷新请点刷新按钮；保存 Key 时才会拉取新图并缓存。
+ */
+async function loadWallpaper() {
+  const cached = await getCachedWallpaper();
+  if (cached) {
+    applyWallpaper(cached);
+  }
+}
+
+/** 刷新按钮：清缓存 → 拉新图 → 缓存。无 Key 时跳转设置。 */
+async function refreshWallpaper() {
+  const key = await getApiKey();
+  if (!key) {
+    openSettingsModal();
+    return;
+  }
+  await clearWallpaperCache();
+  await fetchAndCache(key);
+}
+
+/** 从 Unsplash 拉取一张新壁纸 → 下载本体转 data URL → 渲染 → 缓存 */
+async function fetchAndCache(apiKey) {
+  try {
+    const data = await fetchWallpaper(apiKey);
+    if (!data) return;
+    const dataUrl = await urlToDataUrl(data.urls.regular);
+    applyWallpaper(dataUrl);
+    await cacheWallpaper(dataUrl);
+  } catch (err) {
+    console.warn("[wallpaper] fetchAndCache failed:", err);
+  }
+}
+
+/* ---------- chrome.storage.local 读写 ---------- */
+
+async function getApiKey() {
+  try {
+    const r = await chrome.storage.local.get(WP.API_KEY);
+    return r[WP.API_KEY] || "";
+  } catch {
+    return "";
+  }
+}
+
+async function setApiKey(key) {
+  try {
+    await chrome.storage.local.set({ [WP.API_KEY]: key.trim() });
+  } catch {
+    /* ignore */
+  }
+}
+
+async function clearApiKey() {
+  try {
+    await chrome.storage.local.remove(WP.API_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+async function getCachedWallpaper() {
+  try {
+    const all = await chrome.storage.local.get(null);
+    return all[WP.CACHE_DATA] || "";
+  } catch {
+    return "";
+  }
+}
+
+async function cacheWallpaper(dataUrl) {
+  try {
+    await chrome.storage.local.set({
+      [WP.CACHE_DATA]: dataUrl,
+      [WP.CACHE_TS]: Date.now(),
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
+async function clearWallpaperCache() {
+  try {
+    await chrome.storage.local.remove([WP.CACHE_DATA, WP.CACHE_TS]);
+  } catch {
+    /* ignore */
+  }
+}
+
+/* ---------- Unsplash API ---------- */
+
+async function fetchWallpaper(apiKey) {
+  const url = `${WP.ENDPOINT}?${WP.QUERY}`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Client-ID ${apiKey}` },
+  });
+  if (!res.ok) {
+    const msg =
+      res.status === 403 || res.status === 401
+        ? "Invalid API key. Please check your Unsplash Access Key."
+        : `Unsplash API error (${res.status})`;
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+/** 下载图片本体并编码为 base64 data URL，用于离线缓存与瞬时恢复 */
+async function urlToDataUrl(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Image fetch failed (${res.status})`);
+  const blob = await res.blob();
+  return blobToDataUrl(blob);
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Image encode failed"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/* ---------- 渲染 ---------- */
+
+function applyWallpaper(url) {
+  const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const overlay = dark ? "rgba(0,0,0,0.32)" : "rgba(0,0,0,0.08)";
+  document.body.style.backgroundImage = `linear-gradient(${overlay}, ${overlay}), url("${url}")`;
+  document.body.style.backgroundSize = "cover";
+  document.body.style.backgroundPosition = "center";
+  document.body.style.backgroundRepeat = "no-repeat";
+  document.body.style.backgroundAttachment = "fixed";
+}
+
+function clearWallpaper() {
+  document.body.style.backgroundImage = "";
+  document.body.style.backgroundSize = "";
+  document.body.style.backgroundPosition = "";
+  document.body.style.backgroundRepeat = "";
+  document.body.style.backgroundAttachment = "";
+}
+
+/* ------------------------------ 设置弹窗 ------------------------------ */
+
+async function openSettingsModal() {
+  const hasKey = !!(await getApiKey());
+
+  showModal({
+    title: "Settings",
+    confirmText: "Save",
+    async buildBody(body, ctx) {
+      const key = await getApiKey();
+
+      const status = document.createElement("p");
+      status.className = "modal__hint";
+      status.style.marginBottom = "14px";
+      status.textContent = hasKey
+        ? "Unsplash API key is configured. Use the refresh button ↻ to update the wallpaper."
+        : "Enter your Unsplash Access Key to enable landscape wallpapers.";
+      body.appendChild(status);
+
+      const input = document.createElement("input");
+      input.className = "modal__input";
+      input.type = "password";
+      input.value = key;
+      input.placeholder = "Paste your Unsplash Access Key";
+      input.spellcheck = false;
+      input.autocomplete = "off";
+      body.appendChild(input);
+      ctx.input = input;
+
+      const help = document.createElement("p");
+      help.style.marginTop = "10px";
+      help.style.fontSize = "12px";
+      help.style.color = "var(--text-muted)";
+      help.innerHTML =
+        'Get a free key at <a href="https://unsplash.com/developers" target="_blank" rel="noopener" style="color:var(--accent)">unsplash.com/developers</a>';
+      body.appendChild(help);
+
+      if (hasKey) {
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "modal__btn modal__btn--danger";
+        remove.textContent = "Remove Key";
+        remove.addEventListener("click", async () => {
+          await clearApiKey();
+          await clearWallpaperCache();
+          clearWallpaper();
+          ctx.close();
+        });
+        ctx.footer.insertBefore(remove, ctx.confirmBtn);
+      }
+
+      requestAnimationFrame(() => input.focus());
+    },
+    async onConfirm(ctx) {
+      const key = ctx.input.value.trim();
+      if (key) {
+        await setApiKey(key);
+        await clearWallpaperCache(); // 清除旧缓存，强制拉新图
+        await fetchAndCache(key);
+      } else if (hasKey) {
+        await clearApiKey();
+        await clearWallpaperCache();
+        clearWallpaper();
+      }
+    },
+  });
+}
+
+/* ------------------------------ 错误 ------------------------------ */
 
 function renderError(err) {
   els.contentBody.replaceChildren(
