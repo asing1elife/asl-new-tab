@@ -183,6 +183,24 @@ svg {
   color: var(--text);
 }
 
+/* 侧栏书签悬浮时右侧显示编辑/删除按钮（始终占位避免抖动） */
+.folder-list__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: 4px;
+  background: inherit;
+  visibility: hidden;
+  transition: visibility 0.1s ease;
+}
+
+.folder-list__item--link:hover .folder-list__actions,
+.folder-list__actions:focus-within {
+  visibility: visible;
+}
+
 .folder-list__label {
   flex: 1;
   overflow: hidden;

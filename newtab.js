@@ -247,7 +247,19 @@ function makeSidebarBookmark(bookmark) {
   label.className = "folder-list__label";
   label.textContent = bookmark.title || bookmark.url;
 
-  a.append(ic, label);
+  // 悬浮时在右侧显示编辑/删除按钮（用 span 避免在 <a> 内嵌套交互元素并阻止跳转）
+  const actions = document.createElement("span");
+  actions.className = "folder-list__actions";
+  actions.append(
+    makeActionButton("squarePen", "编辑书签", "edit", () =>
+      openBookmarkEditDialog(bookmark)
+    ),
+    makeActionButton("trash", "删除书签", "danger", () =>
+      openBookmarkDeleteDialog(bookmark)
+    )
+  );
+
+  a.append(ic, label, actions);
   return a;
 }
 
