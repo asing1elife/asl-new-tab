@@ -26,6 +26,10 @@ const ICONS = {
     '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/>',
   trash:
     '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
+  folderPlus:
+    '<path d="M12 10v6"/><path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  circlePlus:
+    '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
 };
 
 function icon(name, cls) {
@@ -46,6 +50,8 @@ const els = {
   brandIcon: document.getElementById("brandIcon"),
   searchIcon: document.getElementById("searchIcon"),
   folderList: document.getElementById("folderList"),
+  addFolderBtn: document.getElementById("addFolderBtn"),
+  addFolderIcon: document.getElementById("addFolderIcon"),
   contentTitle: document.getElementById("contentTitle"),
   contentActions: document.getElementById("contentActions"),
   contentBody: document.getElementById("contentBody"),
@@ -86,6 +92,8 @@ setupBookmarkListeners();
 async function init() {
   els.brandIcon.replaceChildren(icon("compass"));
   els.searchIcon.replaceChildren(icon("search"));
+  els.addFolderIcon.replaceChildren(icon("folderPlus"));
+  els.addFolderBtn.onclick = () => openCreateDialog();
 
   let barNode;
   try {
@@ -172,14 +180,13 @@ function buildSections(folder) {
     for (const child of node.children || []) {
       if (!isFolder(child)) continue;
       const childPath = [...path, child.title || "Untitled folder"];
-      const bms = (child.children || []).filter(isBookmark);
-      if (bms.length)
-        sections.push({
-          folderId: child.id,
-          parentId: node.id,
-          path: childPath,
-          bookmarks: bms,
-        });
+      // 空子目录也作为分区显示，便于新建后立即可见
+      sections.push({
+        folderId: child.id,
+        parentId: node.id,
+        path: childPath,
+        bookmarks: (child.children || []).filter(isBookmark),
+      });
       walk(child, childPath);
     }
   };
@@ -516,7 +523,7 @@ function selectEntry(entryId) {
   els.contentTitle.textContent = label;
   // 顶部目录名后常驻显示编辑/删除，作用于当前选中目录
   els.contentActions.replaceChildren(
-    makeFolderActions(folder, "content__actions-row")
+    makeFolderActions(folder, "content__actions-row", true)
   );
   renderSections(buildSections(folder), label, "folder");
 }
@@ -524,13 +531,12 @@ function selectEntry(entryId) {
 function renderSections(sections, rootLabel, rootIcon) {
   els.contentBody.replaceChildren();
 
-  const usable = sections.filter((s) => s.bookmarks.length > 0);
-  if (usable.length === 0) {
+  if (sections.length === 0) {
     els.contentBody.appendChild(makeEmpty("No bookmarks in this folder"));
     return;
   }
 
-  for (const section of usable) {
+  for (const section of sections) {
     const depth = section.path.length;
     const isSub = depth > 0;
     els.contentBody.appendChild(
@@ -545,6 +551,7 @@ function renderSections(sections, rootLabel, rootIcon) {
           folderId: section.folderId,
           parentId: section.parentId,
           draggableHeading: isSub, // 仅子目录分区可整段拖动排序；根分区即当前目录本身
+          withAdd: isSub, // 子目录支持继续新增子目录（根分区的新增在顶部）
         },
       })
     );
@@ -566,16 +573,27 @@ function makeGroup({ title, tooltip, iconName, depth = 0, cards, meta }) {
   text.textContent = title;
   heading.append(icon(iconName, "group__icon"), text);
 
-  // 该分区对应一个真实目录时，悬浮标题显示编辑/删除（搜索结果分区无 folderId，跳过）
+  // 该分区对应一个真实目录时，悬浮标题显示新增/编辑/删除（搜索结果分区无 folderId，跳过）
   if (meta?.folderId) {
     heading.append(
-      makeFolderActions({ id: meta.folderId, title }, "group__actions")
+      makeFolderActions(
+        { id: meta.folderId, title },
+        "group__actions",
+        meta.withAdd
+      )
     );
   }
 
   const grid = document.createElement("div");
   grid.className = "grid";
-  grid.append(...cards);
+  if (cards.length) {
+    grid.append(...cards);
+  } else {
+    const ph = document.createElement("div");
+    ph.className = "grid__empty";
+    ph.textContent = "暂无书签";
+    grid.append(ph);
+  }
 
   if (meta) {
     group.dataset.folderId = meta.folderId;
@@ -660,11 +678,21 @@ function makeActionButton(iconName, label, variant, onClick) {
   return btn;
 }
 
-/** 一组「重命名 + 删除」按钮，作用于指定目录 {id, title} */
-function makeFolderActions(folder, className) {
+/**
+ * 一组目录操作按钮，作用于指定目录 {id, title}。
+ * withAdd=true 时在最前追加「新增子目录」。
+ */
+function makeFolderActions(folder, className, withAdd) {
   const wrap = document.createElement("span");
   wrap.className = className;
   const title = folder.title || "Untitled folder";
+  if (withAdd) {
+    wrap.append(
+      makeActionButton("circlePlus", "新增子目录", "add", () =>
+        openCreateDialog(folder.id, title)
+      )
+    );
+  }
   wrap.append(
     makeActionButton("squarePen", "重命名目录", "edit", () =>
       openRenameDialog(folder.id, folder.title || "")
@@ -760,6 +788,36 @@ function openRenameDialog(folderId, currentTitle) {
       }
       if (name !== currentTitle) chrome.bookmarks.update(folderId, { title: name });
       // 变更经 onChanged 监听触发整页重渲染
+    },
+  });
+}
+
+/** 在 parentId 下新建目录；不传 parentId 时默认在书签栏下建顶层目录 */
+function openCreateDialog(parentId = BOOKMARK_BAR_ID, parentTitle) {
+  const isTopLevel = parentId === BOOKMARK_BAR_ID;
+  showModal({
+    title: isTopLevel ? "新建目录" : `在「${parentTitle}」中新建子目录`,
+    confirmText: "创建",
+    buildBody(body, ctx) {
+      const input = document.createElement("input");
+      input.className = "modal__input";
+      input.type = "text";
+      input.placeholder = "目录名称";
+      input.maxLength = 200;
+      body.append(input);
+      ctx.input = input;
+      requestAnimationFrame(() => input.focus());
+    },
+    onConfirm(ctx) {
+      const name = ctx.input.value.trim();
+      if (!name) {
+        ctx.input.focus();
+        return false; // 空名称不允许，保持弹窗打开
+      }
+      chrome.bookmarks.create({ parentId, title: name }).then((node) => {
+        if (isTopLevel) state.currentEntryId = node.id; // 顶层目录新建后自动选中
+        init();
+      });
     },
   });
 }

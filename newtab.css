@@ -212,7 +212,15 @@ svg {
   height: 15px;
 }
 
-/* 编辑默认绿色、删除默认红色，悬浮时叠加同色淡底 */
+/* 新增蓝、编辑绿、删除红，悬浮时叠加同色淡底 */
+.action-btn--add {
+  color: var(--accent);
+}
+
+.action-btn--add:hover {
+  background: var(--accent-soft);
+}
+
 .action-btn--edit {
   color: #30a46c;
 }
@@ -227,6 +235,41 @@ svg {
 
 .action-btn--danger:hover {
   background: rgba(229, 72, 77, 0.14);
+}
+
+/* 列表底部固定的「新建目录」按钮 */
+.sidebar__add {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+
+.sidebar__add:hover {
+  background: var(--hover);
+}
+
+.sidebar__add:active {
+  transform: scale(0.99);
+}
+
+.sidebar__add-icon {
+  display: inline-flex;
+}
+
+.sidebar__add-icon svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* ---------- Content ---------- */
@@ -415,6 +458,16 @@ svg {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
   gap: 12px;
+}
+
+/* 空目录占位提示 */
+.grid__empty {
+  grid-column: 1 / -1;
+  padding: 12px 14px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
 /* ---------- Cards ---------- */
