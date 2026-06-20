@@ -48,8 +48,8 @@ const els = {
 
 // 模块级状态，每次 init 重建
 const state = {
-  looseBookmarks: [], // 书签栏直属书签
-  topFolders: [], // 书签栏顶层目录
+  topChildren: [], // 书签栏顶层条目（散装书签 + 目录），保持原始顺序
+  topFolders: [], // 其中的目录
   allBookmarks: [], // 扁平化全部书签（搜索用）
   currentEntryId: null,
 };
@@ -68,19 +68,21 @@ async function init() {
     return;
   }
 
-  const children = barNode.children || [];
-  state.looseBookmarks = children.filter(isBookmark);
-  state.topFolders = children.filter(isFolder);
+  state.topChildren = barNode.children || []; // 顶层条目（散装书签 + 目录），保持原始顺序
+  state.topFolders = state.topChildren.filter(isFolder);
   state.allBookmarks = flattenBookmarks(barNode);
 
   renderSidebar();
 
-  // 默认选中：书签栏有直属书签则进“书签栏”，否则进第一个目录
-  const defaultId =
-    state.looseBookmarks.length > 0
-      ? BOOKMARK_BAR_ID
-      : state.topFolders[0]?.id ?? BOOKMARK_BAR_ID;
-  selectEntry(defaultId);
+  // 默认选中第一个目录；若没有目录则提示
+  const firstFolder = state.topFolders[0];
+  if (firstFolder) {
+    selectEntry(firstFolder.id);
+  } else {
+    state.currentEntryId = null;
+    els.contentTitle.textContent = "";
+    els.contentBody.replaceChildren(makeEmpty("点击左侧书签即可在新标签页打开"));
+  }
 
   els.search.oninput = onSearch;
 
@@ -133,46 +135,50 @@ function buildSections(folder) {
 function renderSidebar() {
   els.folderList.replaceChildren();
 
-  if (state.looseBookmarks.length > 0) {
+  // 顶层条目按书签栏原始顺序混排：散装书签 = 直接打开的链接；目录 = 可选中
+  for (const node of state.topChildren) {
     els.folderList.appendChild(
-      makeSidebarItem({
-        id: BOOKMARK_BAR_ID,
-        title: "书签栏",
-        iconName: "bar",
-        count: state.looseBookmarks.length,
-      })
-    );
-  }
-
-  for (const folder of state.topFolders) {
-    els.folderList.appendChild(
-      makeSidebarItem({
-        id: folder.id,
-        title: folder.title || "未命名目录",
-        iconName: "folder",
-        count: (folder.children || []).length,
-      })
+      isFolder(node) ? makeSidebarFolder(node) : makeSidebarBookmark(node)
     );
   }
 }
 
-function makeSidebarItem({ id, title, iconName, count }) {
+function makeSidebarFolder(folder) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "folder-list__item";
-  btn.dataset.id = id;
+  btn.dataset.id = folder.id;
 
   const label = document.createElement("span");
   label.className = "folder-list__label";
-  label.textContent = title;
+  label.textContent = folder.title || "未命名目录";
 
   const cnt = document.createElement("span");
   cnt.className = "folder-list__count";
+  const count = (folder.children || []).length;
   cnt.textContent = count > 0 ? String(count) : "";
 
-  btn.append(icon(iconName, "folder-list__icon"), label, cnt);
-  btn.addEventListener("click", () => selectEntry(id));
+  btn.append(icon("folder", "folder-list__icon"), label, cnt);
+  btn.addEventListener("click", () => selectEntry(folder.id));
   return btn;
+}
+
+function makeSidebarBookmark(bookmark) {
+  const a = document.createElement("a");
+  a.className = "folder-list__item folder-list__item--link";
+  a.href = bookmark.url;
+  a.target = "_blank";
+  a.rel = "noopener";
+  a.title = `${bookmark.title || bookmark.url}\n${bookmark.url}`;
+
+  const ic = makeFavicon(bookmark.url, "folder-list__icon");
+
+  const label = document.createElement("span");
+  label.className = "folder-list__label";
+  label.textContent = bookmark.title || bookmark.url;
+
+  a.append(ic, label);
+  return a;
 }
 
 function highlightSidebar(entryId) {
@@ -187,16 +193,6 @@ function selectEntry(entryId) {
   state.currentEntryId = entryId;
   highlightSidebar(entryId);
   clearSearch();
-
-  if (entryId === BOOKMARK_BAR_ID) {
-    els.contentTitle.textContent = "书签栏";
-    renderSections(
-      [{ path: [], bookmarks: state.looseBookmarks }],
-      "书签栏",
-      "bar"
-    );
-    return;
-  }
 
   const folder = state.topFolders.find((f) => f.id === entryId);
   if (!folder) return;
@@ -250,24 +246,30 @@ function makeBookmarkCard(bookmark) {
   card.rel = "noopener";
   card.title = `${bookmark.title || bookmark.url}\n${bookmark.url}`;
 
-  const iconWrap = document.createElement("span");
-  iconWrap.className = "card__icon";
-  const img = document.createElement("img");
-  img.width = 20;
-  img.height = 20;
-  img.alt = "";
-  img.src = faviconUrl(bookmark.url);
-  img.addEventListener("error", () => {
-    iconWrap.replaceChildren(icon("globe", "card__fallback"));
-  });
-  iconWrap.appendChild(img);
-
   const label = document.createElement("span");
   label.className = "card__label";
   label.textContent = bookmark.title || bookmark.url;
 
-  card.append(iconWrap, label);
+  card.append(makeFavicon(bookmark.url, "card__icon"), label);
   return card;
+}
+
+/** 构造一个 favicon 容器：加载失败时回退为 Lucide globe 图标 */
+function makeFavicon(pageUrl, wrapClass) {
+  const wrap = document.createElement("span");
+  wrap.className = wrapClass;
+
+  const img = document.createElement("img");
+  img.width = 20;
+  img.height = 20;
+  img.alt = "";
+  img.src = faviconUrl(pageUrl);
+  img.addEventListener("error", () => {
+    wrap.replaceChildren(icon("globe", "favicon-fallback"));
+  });
+
+  wrap.appendChild(img);
+  return wrap;
 }
 
 function faviconUrl(pageUrl) {
