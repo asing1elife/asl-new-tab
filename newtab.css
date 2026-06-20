@@ -123,6 +123,10 @@ svg {
   font-weight: 600;
 }
 
+.folder-list__item.is-dragging {
+  opacity: 0.45;
+}
+
 .folder-list__icon {
   flex-shrink: 0;
   width: 18px;

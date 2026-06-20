@@ -54,7 +54,14 @@ const state = {
   currentEntryId: null,
 };
 
+// 拖拽排序状态
+const drag = { el: null, id: null, fromIndex: -1 };
+// 由本扩展自己发起的 move，其 onMoved 回调应跳过整页刷新（避免闪烁/打断）
+const selfMoves = new Set();
+
 init();
+setupSidebarDnd();
+setupBookmarkListeners();
 
 async function init() {
   els.brandIcon.replaceChildren(icon("bar"));
@@ -87,10 +94,17 @@ async function init() {
   }
 
   els.search.oninput = onSearch;
+}
 
-  // 书签变化时（新增/删除/移动）自动刷新
+/** 书签变化时（新增/删除/移动）自动刷新；只注册一次 */
+function setupBookmarkListeners() {
+  const onChange = (id) => {
+    // 跳过本扩展自己刚发起的 move —— 侧栏 DOM 已乐观更新，无需整页重渲染
+    if (id != null && selfMoves.delete(id)) return;
+    init();
+  };
   for (const ev of ["onCreated", "onRemoved", "onChanged", "onMoved"]) {
-    chrome.bookmarks[ev]?.addListener(() => init());
+    chrome.bookmarks[ev]?.addListener(onChange);
   }
 }
 
@@ -150,6 +164,7 @@ function makeSidebarFolder(folder) {
   btn.type = "button";
   btn.className = "folder-list__item";
   btn.dataset.id = folder.id;
+  btn.draggable = true;
 
   const label = document.createElement("span");
   label.className = "folder-list__label";
@@ -168,6 +183,8 @@ function makeSidebarFolder(folder) {
 function makeSidebarBookmark(bookmark) {
   const a = document.createElement("a");
   a.className = "folder-list__item folder-list__item--link";
+  a.dataset.id = bookmark.id;
+  a.draggable = true;
   a.href = bookmark.url;
   a.target = "_blank";
   a.rel = "noopener";
@@ -187,6 +204,78 @@ function highlightSidebar(entryId) {
   for (const item of els.folderList.children) {
     item.classList.toggle("is-active", item.dataset.id === entryId);
   }
+}
+
+/* ------------------------------ 拖拽排序 ------------------------------ */
+
+/**
+ * 左侧列表拖拽排序，直接写回原生书签。
+ * 左侧列表 = 书签栏顶层子节点的有序映射，所以 DOM 下标 == 书签栏内 index，
+ * 拖完取新下标调用 chrome.bookmarks.move 即可。事件委托在容器上注册一次。
+ */
+function setupSidebarDnd() {
+  const list = els.folderList;
+
+  list.addEventListener("dragstart", (e) => {
+    const item = e.target.closest?.(".folder-list__item");
+    if (!item) return;
+    drag.el = item;
+    drag.id = item.dataset.id;
+    drag.fromIndex = indexInList(item);
+    item.classList.add("is-dragging");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", drag.id); // 抑制 <a> 默认的链接拖拽
+  });
+
+  list.addEventListener("dragover", (e) => {
+    if (!drag.el) return;
+    e.preventDefault(); // 允许放置
+    e.dataTransfer.dropEffect = "move";
+    const after = dragAfterElement(list, e.clientY);
+    if (after == null) list.appendChild(drag.el);
+    else list.insertBefore(drag.el, after);
+  });
+
+  list.addEventListener("drop", (e) => {
+    if (drag.el) e.preventDefault(); // 阻止 <a> 默认导航
+  });
+
+  list.addEventListener("dragend", () => {
+    if (!drag.el) return;
+    drag.el.classList.remove("is-dragging");
+
+    const toIndex = indexInList(drag.el); // 拖拽后的最终可视下标
+    const fromIndex = drag.fromIndex;
+    const id = drag.id;
+    drag.el = drag.id = null;
+    drag.fromIndex = -1;
+    if (toIndex < 0 || toIndex === fromIndex) return;
+
+    // 同父目录内，Chrome 的 BookmarkModel::Move 在“向下移动”时会对 index 自减，
+    // 即它按移除前的数组解释 index，所以向下移动需 +1 才能落到目标可视位置。
+    const moveIndex = fromIndex < toIndex ? toIndex + 1 : toIndex;
+
+    selfMoves.add(id); // 跳过这次自发 move 的整页刷新
+    chrome.bookmarks.move(id, { parentId: BOOKMARK_BAR_ID, index: moveIndex });
+  });
+}
+
+function indexInList(item) {
+  return Array.prototype.indexOf.call(els.folderList.children, item);
+}
+
+/** 根据指针 Y 坐标，找到 dragged 元素应插入到其之前的兄弟项 */
+function dragAfterElement(list, y) {
+  const items = [
+    ...list.querySelectorAll(".folder-list__item:not(.is-dragging)"),
+  ];
+  let closest = { offset: -Infinity, el: null };
+  for (const child of items) {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) closest = { offset, el: child };
+  }
+  return closest.el;
 }
 
 /* ------------------------------ 内容区 ------------------------------ */
