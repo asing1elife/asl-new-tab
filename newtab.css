@@ -135,7 +135,8 @@ svg {
 }
 
 .folder-list__item:hover {
-  background: var(--hover);
+  background: color-mix(in srgb, var(--hover) 70%, transparent);
+  backdrop-filter: blur(6px);
 }
 
 .folder-list__item:active {
@@ -143,7 +144,8 @@ svg {
 }
 
 .folder-list__item.is-active {
-  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--accent-soft) 75%, transparent);
+  backdrop-filter: blur(6px);
   color: var(--accent);
   font-weight: 600;
   box-shadow: inset 3px 0 0 var(--accent);
@@ -275,7 +277,8 @@ svg {
 }
 
 .sidebar__add:hover {
-  background: var(--hover);
+  background: color-mix(in srgb, var(--hover) 70%, transparent);
+  backdrop-filter: blur(6px);
 }
 
 .sidebar__add:active {
@@ -364,7 +367,8 @@ svg {
   padding: 9px 12px 9px 34px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--bg);
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  backdrop-filter: blur(4px);
   color: var(--text);
   font-size: 13px;
   outline: none;
@@ -489,7 +493,8 @@ svg {
   padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--card-bg);
+  background: color-mix(in srgb, var(--card-bg) 78%, transparent);
+  backdrop-filter: blur(6px);
   color: var(--text);
   font-size: 13px;
   text-decoration: none;
@@ -556,7 +561,8 @@ svg {
   gap: 2px;
   padding: 2px;
   border-radius: 8px;
-  background: var(--card-bg);
+  background: color-mix(in srgb, var(--card-bg) 85%, transparent);
+  backdrop-filter: blur(6px);
   box-shadow: var(--shadow-sm);
 }
 
