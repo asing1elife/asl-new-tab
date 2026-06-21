@@ -1184,12 +1184,27 @@ async function fetchAndCache(apiKey) {
   try {
     const data = await fetchWallpaper(apiKey);
     if (!data) return;
-    const dataUrl = await urlToDataUrl(data.urls.regular);
+    const dataUrl = await urlToDataUrl(buildWallpaperUrl(data.urls.raw));
     applyWallpaper(dataUrl);
     await cacheWallpaper(dataUrl);
   } catch (err) {
     console.warn("[wallpaper] fetchAndCache failed:", err);
   }
+}
+
+/**
+ * 基于原图地址（urls.raw）构建匹配当前屏幕的高清壁纸 URL。
+ * Unsplash 原图走 Imgix，可用查询参数控制尺寸/质量：
+ *   - w/h + dpr：按物理像素请求，避免高分屏拉糊
+ *   - fit=crop：等比裁剪铺满
+ *   - q=85 + auto=format：兼顾画质与体积，自动下发 webp/avif
+ */
+function buildWallpaperUrl(rawUrl) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2); // 限制 2x，避免 4K×3 体积过大
+  const w = Math.round(window.screen.width * dpr);
+  const h = Math.round(window.screen.height * dpr);
+  const sep = rawUrl.includes("?") ? "&" : "?";
+  return `${rawUrl}${sep}w=${w}&h=${h}&fit=crop&crop=entropy&q=85&auto=format`;
 }
 
 /* ---------- chrome.storage.local 读写 ---------- */
