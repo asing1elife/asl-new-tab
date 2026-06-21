@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ASL New Tab",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Replace new tab with your native bookmarks: folders on the left, bookmarks on the right, click to open.",
   "permissions": ["bookmarks", "favicon", "storage"],
   "chrome_url_overrides": {
